@@ -15,9 +15,9 @@ import { resolveGfmSlug } from "./gfm-slugify";
  */
 export function patchWorkspace(plugin: Plugin): () => void {
   const workspace = plugin.app.workspace;
-  
+
   // ── Patch trigger("hover-link") ──────────────────────────────
-  
+
   /**
    * Intercept `workspace.trigger` to catch the `'hover-link'` event before
    * the Page Preview core plugin attempts to resolve it.
@@ -33,7 +33,7 @@ export function patchWorkspace(plugin: Plugin): () => void {
           if (hashIdx !== -1) {
             const notePath = linktext.substring(0, hashIdx);
             const slug = linktext.substring(hashIdx + 1);
-            
+
             if (slug.includes("-") && !/[A-Z]/.test(slug)) {
               let sourcePath = "";
               if (data.sourcePath) {
@@ -43,7 +43,7 @@ export function patchWorkspace(plugin: Plugin): () => void {
               } else {
                  sourcePath = plugin.app.workspace.getActiveFile()?.path ?? "";
               }
-              
+
               const resolved = resolveGfmSlug(plugin, notePath, slug, sourcePath);
               if (resolved) {
                 data.linktext = notePath + "#" + resolved;
@@ -59,7 +59,7 @@ export function patchWorkspace(plugin: Plugin): () => void {
   };
 
   // ── Patch openLinkText ─────────────────────────────────────────
-  
+
   /**
    * Intercept `workspace.openLinkText` to catch physical clicks and
    * programmatic navigations across the entire application.
@@ -76,7 +76,7 @@ export function patchWorkspace(plugin: Plugin): () => void {
         if (hashIdx !== -1) {
           const notePath = linktext.substring(0, hashIdx);
           const slug = linktext.substring(hashIdx + 1);
-          
+
           if (slug.includes("-") && !/[A-Z]/.test(slug)) {
             const resolved = resolveGfmSlug(plugin, notePath, slug, sourcePath);
             if (resolved) {
@@ -90,7 +90,7 @@ export function patchWorkspace(plugin: Plugin): () => void {
     }
     return originalOpenLinkText.call(this, linktext, sourcePath, ...rest);
   };
-  
+
   return () => {
     workspace.trigger = originalTrigger;
     workspace.openLinkText = originalOpenLinkText;

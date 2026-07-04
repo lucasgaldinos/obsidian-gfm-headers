@@ -48,17 +48,23 @@ export function resolveGfmSlug(
   const headings = cache?.headings;
   if (!headings || headings.length === 0) return null;
 
+  // GFM appends -1, -2, etc. to duplicate headings. Count occurrences
+  // to generate the correct final slug for each heading in document order.
+  const slugCounts = new Map<string, number>();
+
   for (const h of headings) {
     const slugified = gfmSlugify(h.heading);
-    if (slugified === decodedSlug) {
+    const count = slugCounts.get(slugified) ?? 0;
+
+    // First occurrence → no suffix. Subsequent → -1, -2, ...
+    const finalSlug = count === 0 ? slugified : `${slugified}-${count}`;
+
+    if (finalSlug === decodedSlug) {
       return h.heading;
     }
-    // GFM appends -1, -2, etc. when headings are duplicated.
-    // Obsidian headings don't have these suffixes, so strip and retry.
-    const dedupMatch = decodedSlug.match(/^(.+)-\d+$/);
-    if (dedupMatch && slugified === dedupMatch[1]) {
-      return h.heading;
-    }
+
+    slugCounts.set(slugified, count + 1);
   }
+
   return null;
 }
