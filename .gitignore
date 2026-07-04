@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# RTK proxy runtime
+.rtk/
+
+# Build artifacts (source maps, etc.)
+*.map
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Obsidian workspace
+.obsidian/
+.hotreload/
+
+# Logs
+*.log
+npm-debug.log*
