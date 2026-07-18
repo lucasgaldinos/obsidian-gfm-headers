@@ -17,6 +17,37 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 [keepachangelog]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [1.3.0][] — 2026-07-17
+
+### Added
+
+- **Settings Tab**: Configurable prefix and suffix characters for autocompleted links (e.g., `§Heading¶`). Dual-API support: uses declarative `getSettingDefinitions()` on Obsidian 1.13.0+, falls back to `display()` on older versions.
+- **Wikilink Alias Auto-Injection**: When Obsidian is using wikilinks (`[[`), selecting a heading from autocomplete now automatically appends `|Original Heading` — producing `[[#gfm-slug|Original Heading]]` instead of bare `[[#gfm-slug]]`.
+- **Link Affixes**: User-configurable prefix/suffix applied to heading aliases during autocomplete.
+- `isGfmSlug()` shared guard predicate in `gfm-slugify.ts`.
+- `transformSuggestion()` pure pipeline extracting heading mutation logic from `selectSuggestion` god-function.
+- `decodeGfmSlug()` and `resolveTargetFile()` shared resolution helpers.
+- `injectVirtualBlock()` shared utility with cleanup callback and `VIRTUAL_BLOCK_CLEANUP_MS` constant.
+- `normalizeSlug()` in `src/link-parse.ts`.
+
+### Changed
+
+- `patch-workspace.ts` split by SRP into `patch-link-click.ts` (`applyClickPatch`, async) and `patch-link-hover.ts` (`applyHoverPatch`, sync).
+- `buildDocumentIndex()` replaced O(n²) nested loop with 2-pass O(n) stack-based algorithm.
+- `link-target.ts` renamed to `types.ts` — all 5 imports updated.
+- Variable renames for readability: `data` → `hoverEventPayload`, `value` → `suggestionValue`, `mutated` → `didModifySubpath`.
+- `resolveGfmTarget()` and `resolveGfmTargetSync()` unified to use shared `decodeGfmSlug()` + `resolveTargetFile()` helpers, reducing each from ~90 to ~15 lines.
+- Hover handler no longer uses `require("./document-index")` inlining — delegates to `resolveGfmTargetSync()`.
+- Settings tab uses declarative `getSettingDefinitions()` API (Obsidian 1.13.0+) with `display()` fallback.
+- `minAppVersion` set to `1.12.7` for dual settings API support.
+
+### Fixed
+
+- **Inverted guard bug**: `isGfmSlug()` condition was inverted in `resolve-target.ts`, causing valid GFM slugs to pass through unresolved.
+- **Settings tab broken on Obsidian <1.13.0**: Declarative-only API caused empty settings pane. Fixed with dual-API support.
+- **Affixes applied to wrong field**: Affixes were appended to `suggestionValue.subpath` (the slug) instead of `suggestionValue.heading` (the alias).
+- **Wikilink alias not injected**: Multiple iterations required; finally resolved via `plugin.app.workspace.activeEditor?.editor` post-insertion modification.
+
 ## [1.2.0][] — 2026-07-13
 
 ### Added
@@ -108,6 +139,7 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - Editing-mode (Source & Live Preview) link interception via a CM6 `ViewPlugin.fromClass`
   extension that captures mousedown events.
 
+[1.3.0]: https://github.com/user/obsidian-gfm-headers/releases/tag/1.3.0
 [1.2.0]: https://github.com/user/obsidian-gfm-headers/releases/tag/1.2.0
 [1.1.0]: https://github.com/user/obsidian-gfm-headers/releases/tag/1.1.0
 [1.0.0]: https://github.com/user/obsidian-gfm-headers/releases/tag/1.0.0

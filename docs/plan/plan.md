@@ -3,19 +3,18 @@ title: "GFM heading links architecture plan"
 tags: [architecture, implementation-plan, obsidian-plugin, gfm-heading-links, solid]
 description: "Unified architecture for deterministic GFM heading navigation, autocomplete, and Page Preview in Obsidian."
 date_created: 2026-07-08
-date_changed: 2026-07-14
+date_changed: 2026-07-16
 author: ["Lucas Galdino", "GitHub Copilot"]
 goal: "Implement a unified, deterministic architecture for GFM-style heading and anchor navigation in Obsidian"
 version: "2.0"
-status: "v1.2.0 — released 2026-07-16"
+status: "v1.3.0 ready for release — all 13 Phase 10 tasks complete, 25 tests passing"
 ---
 
-> [!tip] Plan status: core implementation complete, dev branch cleanup active
-> All 5 architectural layers are implemented and passing tests. The hover preview and click navigation both use virtual block injection. Autocomplete outputs GFM slugs via `EditorSuggest.selectSuggestion`.
+> [!tip] Plan status: v1.3.0 ready. All 13 Phase 10 tasks (TASK-1001–1013) complete. 25 tests passing, build clean.
 >
-> **Remaining work (this session):** console.log cleanup, plan file refresh, reveal-target validation guide, harder slug test cases, proper debug system planning.
+> v1.3 features: settings tab, wikilink alias auto-injection, link affixes, 9 refactoring improvements (shared guard, unified resolution, shared VBI, SRP split, variable renames, O(n) algorithm, pure pipeline, link normalization, de-duplicated resolution). HTML anchor support deferred to v2.
 >
-> See [tasks.md](./tasks.md) for the current implementation status and [task-bugs.md](./task-bugs.md) for a record of bugs and their fixes.
+> See [tasks.md](./tasks.md#phase-10-v13--code-quality-refactoring--settings--wikilink-alias) for the current implementation status.
 
 # GFM heading links architecture plan
 

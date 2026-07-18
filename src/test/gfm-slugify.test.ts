@@ -25,7 +25,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { gfmSlugify } from "../gfm-slugify";
+import { gfmSlugify, isGfmSlug } from "../gfm-slugify";
 
 /**
  * Test suite for the `gfmSlugify` function.
@@ -254,5 +254,88 @@ describe("gfmSlugify", () => {
 
         // Leading/trailing underscores preserved
         expect(gfmSlugify("_private")).toBe("_private");
+    });
+
+    /**
+     * EDGE CASES — HEADINGS WITH ONLY SPECIAL CHARACTERS
+     *
+     * Headings consisting entirely of punctuation, emoji, or other
+     * non-letter/number characters produce empty slugs. This is
+     * technically valid per the GFM spec — the heading has no
+     * ASCII-meaningful content for a slug.
+     */
+    it("handles headings with only punctuation or emoji", () => {
+        // Only punctuation → empty string
+        expect(gfmSlugify("!!!")).toBe("");
+
+        // Only emoji → empty string (no ASCII letters/numbers)
+        expect(gfmSlugify("😀😀😀")).toBe("");
+
+        // Only symbols
+        expect(gfmSlugify("@#$%")).toBe("");
+    });
+});
+
+/**
+ * Test suite for `isGfmSlug` — the GFM slug detection predicate.
+ *
+ * Verifies the guard heuristic correctly distinguishes GFM slugs from
+ * Obsidian's native format, block references, and footnotes.
+ * Added per TASK-1004.
+ */
+describe("isGfmSlug", () => {
+    it("detects valid GFM slugs", () => {
+        expect(isGfmSlug("my-heading")).toBe(true);
+        expect(isGfmSlug("hello-world")).toBe(true);
+        expect(isGfmSlug("café-crème")).toBe(true);
+        expect(isGfmSlug("keep_underscores")).toBe(true);
+        expect(isGfmSlug("my-heading-1")).toBe(true);
+        expect(isGfmSlug("a")).toBe(true);
+    });
+
+    it("rejects uppercase (Obsidian format)", () => {
+        expect(isGfmSlug("My-Heading")).toBe(false);
+        expect(isGfmSlug("My Heading")).toBe(false);
+        expect(isGfmSlug("HELLO")).toBe(false);
+        expect(isGfmSlug("mixedCase")).toBe(false);
+    });
+
+    it("rejects URL-encoded slugs", () => {
+        expect(isGfmSlug("my%20heading")).toBe(false);
+        expect(isGfmSlug("hello%20world")).toBe(false);
+    });
+
+    it("rejects block references", () => {
+        expect(isGfmSlug("^block-id")).toBe(false);
+        expect(isGfmSlug("^abc123")).toBe(false);
+    });
+
+    it("rejects footnote references", () => {
+        expect(isGfmSlug("[^footnote]")).toBe(false);
+        expect(isGfmSlug("[^1]")).toBe(false);
+    });
+
+    it("rejects empty slugs", () => {
+        expect(isGfmSlug("")).toBe(false);
+    });
+
+    // ─── v1.3 Edge Cases ───
+
+    it("accepts slugs with affix characters (prefix/suffix)", () => {
+        // § and ¶ are not uppercase letters, so they pass the guard.
+        // Affix stripping happens in normalizeSlug() before resolution.
+        expect(isGfmSlug("§my-heading")).toBe(true);
+        expect(isGfmSlug("my-heading¶")).toBe(true);
+        expect(isGfmSlug("§my-heading¶")).toBe(true);
+    });
+
+    it("accepts slugs starting with numbers", () => {
+        expect(isGfmSlug("1-introduction")).toBe(true);
+        expect(isGfmSlug("123-test")).toBe(true);
+    });
+
+    it("rejects slugs with uppercase among affix chars", () => {
+        // § is fine, but H is uppercase → reject
+        expect(isGfmSlug("My-Heading")).toBe(false);
     });
 });

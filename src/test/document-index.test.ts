@@ -273,6 +273,178 @@ describe("buildDocumentIndex", () => {
     // endLine = 25 (its own line, no content below it in this test).
     expect((index.get("h1-next") as any).endLine).toBe(25);
   });
+
+  /**
+   * CROSS-BASESLUG COLLISION (The "Commands" Problem — Bug 3 fix)
+   *
+   * When a heading's literal text matches the collision-suffix pattern of
+   * another heading, the collision algorithm must detect the conflict and
+   * skip to the next available suffix.
+   *
+   * ## The test document structure
+   *
+   * ```
+   * Line 5:  ## Commands-1     ← literal, slug should be "commands-1"
+   * Line 10: ## Commands-1     ← 2nd literal, slug should be "commands-1-1"
+   * Line 15: ## Commands       ← 1st "Commands", slug should be "commands"
+   * Line 20: ## Commands       ← 2nd "Commands", slug should be "commands-2"
+   *                              (NOT "commands-1" — that's taken by literal!)
+   * ```
+   *
+   * ## The bug
+   *
+   * Before the fix, the per-baseSlug counter saw "commands" → count=1
+   * for the 2nd "## Commands" and produced "commands-1", which collided
+   * with the literal "## Commands-1" heading. The Map.set() overwrote
+   * the literal entry, so #commands-1 silently pointed to the wrong heading.
+   *
+   * ## The fix
+   *
+   * The collision loop now checks `index.has(finalSlug)` against the actual
+   * index rather than a per-baseSlug counter. This catches cross-baseSlug
+   * collisions and skips to the next available suffix.
+   */
+  it("handles cross-baseSlug collision (literal matches collision suffix)", () => {
+    const headings: HeadingCache[] = [
+      {
+        heading: "Commands-1",
+        level: 2,
+        position: {
+          start: { line: 5, col: 0, offset: 0 },
+          end: { line: 5, col: 0, offset: 0 },
+        },
+      },
+      {
+        heading: "Commands-1",
+        level: 2,
+        position: {
+          start: { line: 10, col: 0, offset: 0 },
+          end: { line: 10, col: 0, offset: 0 },
+        },
+      },
+      {
+        heading: "Commands",
+        level: 2,
+        position: {
+          start: { line: 15, col: 0, offset: 0 },
+          end: { line: 15, col: 0, offset: 0 },
+        },
+      },
+      {
+        heading: "Commands",
+        level: 2,
+        position: {
+          start: { line: 20, col: 0, offset: 0 },
+          end: { line: 20, col: 0, offset: 0 },
+        },
+      },
+    ];
+
+    const index = buildDocumentIndex({ headings } as any);
+
+    // 4 headings → 4 entries, all with distinct slugs
+    expect(index.size).toBe(4);
+
+    // First literal: slug should be "commands-1"
+    const literal1 = index.get("commands-1");
+    expect(literal1).toBeDefined();
+    expect((literal1 as any).line).toBe(5);
+    expect((literal1 as any).heading).toBe("Commands-1");
+
+    // Second literal: slug should be "commands-1-1" (suffix appended to base)
+    const literal2 = index.get("commands-1-1");
+    expect(literal2).toBeDefined();
+    expect((literal2 as any).line).toBe(10);
+
+    // First "Commands": slug should be "commands"
+    const cmd1 = index.get("commands");
+    expect(cmd1).toBeDefined();
+    expect((cmd1 as any).line).toBe(15);
+
+    // Second "Commands": slug should be "commands-2"
+    // (NOT "commands-1" — that's already claimed by the literal!)
+    const cmd2 = index.get("commands-2");
+    expect(cmd2).toBeDefined();
+    expect((cmd2 as any).line).toBe(20);
+
+    // Verify "commands-1" does NOT point to the 2nd "Commands" heading.
+    expect(index.get("commands-1")!).not.toBe(index.get("commands-2")!);
+  });
+
+  /**
+   * CROSS-BASESLUG COLLISION — REVERSED ORDER
+   *
+   * Same scenario but "## Commands" headings appear BEFORE the literal
+   * "## Commands-1" headings. This verifies the fix works regardless
+   * of document ordering (whichever heading arrives first gets the slug).
+   */
+  it("handles cross-baseSlug collision with reversed heading order", () => {
+    const headings: HeadingCache[] = [
+      {
+        heading: "Commands",
+        level: 2,
+        position: {
+          start: { line: 5, col: 0, offset: 0 },
+          end: { line: 5, col: 0, offset: 0 },
+        },
+      },
+      {
+        heading: "Commands",
+        level: 2,
+        position: {
+          start: { line: 10, col: 0, offset: 0 },
+          end: { line: 10, col: 0, offset: 0 },
+        },
+      },
+      {
+        heading: "Commands-1",
+        level: 2,
+        position: {
+          start: { line: 15, col: 0, offset: 0 },
+          end: { line: 15, col: 0, offset: 0 },
+        },
+      },
+      {
+        heading: "Commands-1",
+        level: 2,
+        position: {
+          start: { line: 20, col: 0, offset: 0 },
+          end: { line: 20, col: 0, offset: 0 },
+        },
+      },
+    ];
+
+    const index = buildDocumentIndex({ headings } as any);
+
+    expect(index.size).toBe(4);
+
+    // "## Commands" (1st) at line 5 → "commands"
+    const cmd1 = index.get("commands");
+    expect(cmd1).toBeDefined();
+    expect((cmd1 as any).line).toBe(5);
+
+    // "## Commands" (2nd) at line 10 → "commands-1" (taken first!)
+    const cmd2 = index.get("commands-1");
+    expect(cmd2).toBeDefined();
+    expect((cmd2 as any).line).toBe(10);
+    expect((cmd2 as any).heading).toBe("Commands");
+
+    // "## Commands-1" (1st literal) at line 15 → "commands-1-1"
+    // because "commands-1" was already claimed by the duplicate "## Commands"
+    const literal1 = index.get("commands-1-1");
+    expect(literal1).toBeDefined();
+    expect((literal1 as any).line).toBe(15);
+    expect((literal1 as any).heading).toBe("Commands-1");
+
+    // "## Commands-1" (2nd literal) at line 20 → "commands-1-2"
+    // (suffix -2 because -1 and -1-1 are both taken)
+    const literal2 = index.get("commands-1-2");
+    expect(literal2).toBeDefined();
+    expect((literal2 as any).line).toBe(20);
+
+    // Verify no ambiguous entries
+    expect(index.get("commands-1")!).not.toBe(index.get("commands-1-1")!);
+  });
 });
 
 /**

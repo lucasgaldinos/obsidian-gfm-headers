@@ -11,6 +11,8 @@ parent: "[[validation.md]]"
 # Validation: Reveal Target (`revealTargetInView`)
 
 > **Implementation category:** Layer 5 (Reveal Fallback) in the [5-layer architecture](../design.md#1-architecture-overview). The final step in both the ideal path (Virtual Block Injection delegates scrolling to Obsidian) and the fallback path (manual scroll for non-heading targets).
+>
+> **HTML anchor reveal failures (Bug 5):** The investigation plan and mode analysis below are preserved for v2. HTML anchor reveal in Source/Live Preview is deferred — see [Bug 5](../task-bugs.md#5-html-anchor-click-only-works-in-reading-mode--deferred-to-v2).
 
 ## What's Being Validated
 

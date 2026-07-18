@@ -25,7 +25,7 @@ The plugin has 5 implementation layers. Each has a dedicated validation file wit
 | Reveal Target | 5 — Reveal | [`reveal-target.md`](reveal-target.md) | `revealTargetInView`, `applyScroll`, mode-dependent scrolling, fallback mechanism |
 | Passthrough & Guard | Cross-cutting | [`passthrough.md`](passthrough.md) | GFM guard logic, uppercase/URL-encoded/block-ref detection, format-dependent behavior |
 
-> **Bug 10 (HTML Anchor Click)** spans the Click Navigation and Reveal Target categories. See the [investigation plan](../task-bugs.md#10-html-anchor-click-only-works-in-reading-mode) in the bug tracker and the mode × link-format matrix in [`click-navigation.md`](click-navigation.md#mode--link-format-matrix).
+> **HTML Anchor Click + Hover (Bugs 1 & 5):** Deferred to v2. The validation matrices in [`click-navigation.md`](click-navigation.md) and [`hover-preview.md`](hover-preview.md) document the current broken behavior and will serve as test guides when v2 work begins. See [Bug 1](../task-bugs.md#1-html-anchor-hover-inconsistency--deferred-to-v2) and [Bug 5](../task-bugs.md#5-html-anchor-click-only-works-in-reading-mode--deferred-to-v2).
 
 ## Manual validation matrix
 
@@ -49,6 +49,10 @@ Test every scenario in Reading view, Live Preview, and Source mode. Each scenari
 | Ctrl/Cmd click | Required | Required | Required | New tab opens, scrolls correctly. |
 | Mobile tap | Required | Required | Required | No desktop-only crash. |
 | Autocomplete Dropdown | Required | Required | Required | Selecting a heading outputs a GFM slug while preserving alias. |
+| Wikilink alias injection (v1.3) | Required | Required | Required | Wikilinks auto-inject alias after slug. |
+| Link affixes (v1.3) | Required | Required | Required | Prefix/suffix applied to heading alias, not slug. |
+| Wikilink alias toggle OFF (v1.3) | Required | Required | Required | Bare `[[#slug]]` when toggle disabled. |
+| Settings tab persistence (v1.3) | Required | Required | Required | Settings survive Obsidian restart. |
 
 ### Bug Validation (Resolved)
 

@@ -35,7 +35,7 @@
  */
 
 import { View, MarkdownView } from "obsidian";
-import type { AnchorTarget } from "./link-target";
+import type { AnchorTarget } from "./types";
 
 /**
  * Programmatically scrolls a MarkdownView to a specific target and triggers Obsidian's native highlight animation.

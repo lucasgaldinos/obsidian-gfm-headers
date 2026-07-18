@@ -1,7 +1,9 @@
 import { Plugin, TFile } from "obsidian";
-import { applyWorkspacePatches } from "./src/patch-workspace";
+import { applyClickPatch } from "./src/patch-link-click";
+import { applyHoverPatch } from "./src/patch-link-hover";
 import { applyEditorSuggestPatches } from "./src/patch-editor-suggest";
 import { debugLog, DEBUG_ENABLED } from "./src/debug";
+import { GfmSettingsTab, DEFAULT_SETTINGS, type GfmSettings } from "./src/settings";
 import { IndexCache } from "./src/index-cache";
 import type { GfmHeadingLinksPlugin } from "./src/resolve-target";
 
@@ -26,6 +28,13 @@ export default class GfmHeadingLinksPluginImpl extends Plugin implements GfmHead
   public indexCache!: IndexCache;
 
   /**
+   * User-customizable settings persisted via loadData()/saveData().
+   * Exposed on the plugin instance for access by the editor suggest patch
+   * and the slug resolution pipeline (affix stripping).
+   */
+  public settings: GfmSettings = DEFAULT_SETTINGS;
+
+  /**
    * Initializes the plugin when it is enabled by the user.
    * 
    * Note on patching:
@@ -37,6 +46,9 @@ export default class GfmHeadingLinksPluginImpl extends Plugin implements GfmHead
    * restoration instructions on a shelf. The cleanup code does not run yet.
    */
   async onload() {
+    // Load persisted settings before anything else
+    await this.loadSettings();
+
     this.indexCache = new IndexCache(this);
 
     /**
@@ -76,16 +88,39 @@ export default class GfmHeadingLinksPluginImpl extends Plugin implements GfmHead
       })
     );
 
-    // applyWorkspacePatches injects our custom logic into Obsidian's workspace and returns a cleanup function.
-    // We save this returned cleanup function into our cleanupFunctions array.
-    const workspaceCleanup = applyWorkspacePatches(this);
-    this.cleanupFunctions.push(workspaceCleanup);
+    // Apply click and hover patches (split per SRP — TASK-1007).
+    // Each returns a cleanup function saved for onunload restoration.
+    const clickCleanup = applyClickPatch(this);
+    this.cleanupFunctions.push(clickCleanup);
+
+    const hoverCleanup = applyHoverPatch(this);
+    this.cleanupFunctions.push(hoverCleanup);
     
+    // Register the settings tab (TASK-1003)
+    this.addSettingTab(new GfmSettingsTab(this.app, this));
+
     // Defer the editor suggest patch slightly to ensure Obsidian's native suggestors are loaded
     setTimeout(() => {
       const editorSuggestCleanup = applyEditorSuggestPatches(this);
       this.cleanupFunctions.push(editorSuggestCleanup);
     }, 1000);
+  }
+
+  /**
+   * Loads settings from Obsidian's plugin data storage.
+   * Merges with defaults so new settings added in future versions
+   * don't break existing user configurations.
+   */
+  async loadSettings() {
+    const data = await this.loadData();
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
+  }
+
+  /**
+   * Persists current settings to Obsidian's plugin data storage.
+   */
+  async saveSettings() {
+    await this.saveData(this.settings);
   }
 
   /**

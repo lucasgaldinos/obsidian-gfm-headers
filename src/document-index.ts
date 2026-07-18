@@ -38,8 +38,8 @@ import type { CachedMetadata } from "obsidian";
 
 // HeadingCache is used implicitly via CachedMetadata.heading
 
-import type { DocumentIndex, HeadingAnchorTarget, HtmlAnchorTarget } from "./link-target";
-import { gfmSlugify } from "./gfm-slugify";
+import type { DocumentIndex, HeadingAnchorTarget, HtmlAnchorTarget } from "./types";
+import { gfmSlugify, allocateUniqueSlug } from "./gfm-slugify";
 
 /**
  * Builds a complete document index from Obsidian's cached heading metadata.
@@ -99,81 +99,64 @@ import { gfmSlugify } from "./gfm-slugify";
  * ```
  */
 export function buildDocumentIndex(cache: CachedMetadata): DocumentIndex {
-    // The DocumentIndex is a Map for O(1) slug lookups. We use a Map rather than a plain object because:
-    // 1. Map preserves insertion order (useful for debugging).
-    // 2. Map has better performance for frequent additions.
-    // 3. Map keys can be any type (though we only use strings).
     const index: DocumentIndex = new Map();
-
-    // Obsidian's heading cache may be undefined for files with no headings.
-    // We normalize to an empty array to simplify the loop logic below.
     const headings = cache.headings || [];
 
-    // slugCounts tracks how many times each base slug has been seen.
-    // This is the collision counter used for GFM-style suffixing.
-    // Key: base slug string (e.g., "my-heading")
-    // Value: number of times we've encountered this slug so far
-    const slugCounts = new Map<string, number>();
+    if (headings.length === 0) return index;
 
-    // Iterate through all headings in document order (line number ascending).
-    // Obsidian guarantees this ordering in its metadata cache.
+    // Determine the end-of-file boundary for headings whose section extends
+    // to the end of the document (no subsequent same-or-higher-level heading).
+    const lastHeading = headings[headings.length - 1];
+    let eofLine = lastHeading.position.start.line;
+    let eofOffset: number | undefined;
+    if (cache.sections && cache.sections.length > 0) {
+        eofOffset = cache.sections[cache.sections.length - 1].position.end.offset;
+    }
+
+    // ─── PASS 1: Compute section boundaries using a stack (O(n)) ───
+    // Stack holds indices of headings whose sections haven't been "closed"
+    // yet by a subsequent heading of equal or higher level.
+    // Replaces the previous O(n²) nested loop (TASK-1009).
+    const endLines: number[] = new Array(headings.length);
+    const endOffsets: (number | undefined)[] = new Array(headings.length);
+    const stack: number[] = [];
+
+    for (let i = 0; i < headings.length; i++) {
+        const current = headings[i];
+
+        // Pop headings from the stack that are "closed" by this heading.
+        // A level-2 heading's section ends when we encounter another
+        // level-2 or level-1 heading (current.level <= popped.level).
+        while (stack.length > 0 && current.level <= headings[stack[stack.length - 1]].level) {
+            const poppedIdx = stack.pop()!;
+            endLines[poppedIdx] = current.position.start.line - 1;
+            endOffsets[poppedIdx] = current.position.start.offset;
+        }
+
+        stack.push(i);
+    }
+
+    // Remaining stack entries extend to end of file
+    while (stack.length > 0) {
+        const idx = stack.pop()!;
+        endLines[idx] = eofLine;
+        endOffsets[idx] = eofOffset;
+    }
+
+    // ─── PASS 2: Build HeadingAnchorTarget entries ───
     for (let i = 0; i < headings.length; i++) {
         const heading = headings[i];
 
         // STEP 1: Generate the base GFM slug from the heading's display text.
-        // This strips punctuation, lowercases, replaces spaces with hyphens,
-        // and preserves unicode characters per the GFM specification.
         const baseSlug = gfmSlugify(heading.heading);
 
         // STEP 2: Handle duplicate heading collisions with GFM-style suffixes.
-        // The first occurrence of a slug gets no suffix.
-        // Subsequent occurrences get -1, -2, -3, etc.
-        // Example: three headings all saying "Introduction" produce:
-        //   "introduction", "introduction-1", "introduction-2"
-        const count = slugCounts.get(baseSlug) || 0;
-        const finalSlug = count === 0 ? baseSlug : `${baseSlug}-${count}`;
-        slugCounts.set(baseSlug, count + 1);
+        const finalSlug = allocateUniqueSlug(baseSlug, index);
 
-        // STEP 3: Compute the section's end boundary.
-        // We initialize endLine to the heading's own line (degenerate case
-        // where the heading has no content below it before the next heading).
-        // endOffset starts undefined — we'll try to resolve it below.
-        let endLine = heading.position.start.line;
-        let endOffset: number | undefined;
+        // STEP 3: Build section position from pre-computed boundaries.
+        const endLine = endLines[i];
+        const endOffset = endOffsets[i];
 
-        // Scan forward through subsequent headings to find the first one
-        // with equal or higher level (lower or equal level number).
-        // In markdown: # = level 1 (highest), ###### = level 6 (lowest).
-        // A level 2 heading's section ends when we encounter another level 1 or level 2.
-        for (let j = i + 1; j < headings.length; j++) {
-            if (headings[j].level <= heading.level) {
-                // We found a heading that "closes" our current section.
-                // The section ends on the line just before this next heading starts.
-                // We use line - 1 because the section shouldn't include the next heading itself.
-                endLine = headings[j].position.start.line - 1;
-                endOffset = headings[j].position.start.offset;
-                break; // Stop scanning — we found the boundary
-            }
-        }
-
-        // If no subsequent heading of equal-or-higher level was found,
-        // the section extends to the end of the file.
-        // We use Obsidian's cached section data to find the last byte offset.
-        // sections[] contains the parsed structure of the entire document.
-        if (endOffset === undefined && cache.sections && cache.sections.length > 0) {
-            // The last section's end offset represents the end of the file content.
-            endOffset = cache.sections[cache.sections.length - 1].position.end.offset;
-        }
-
-        // STEP 4: Construct a synthetic position object spanning the full section.
-        // This is used by the virtual block injection trick:
-        // When we inject a temporary block into cache.blocks, Obsidian's
-        // native scrolling uses this position to locate the target region.
-        //
-        // We use the heading's own position.start as our start point,
-        // and our computed endLine/endOffset as the end point.
-        // If endOffset was never resolved (unlikely but defensive), we fall
-        // back to heading.position.end which Obsidian provided.
         const sectionPosition = {
             start: heading.position.start,
             end: endOffset
@@ -181,22 +164,7 @@ export function buildDocumentIndex(cache: CachedMetadata): DocumentIndex {
                 : heading.position.end
         };
 
-        // [fix] All this can be for sure optimized in V2, improving the headings traversal.
-        // The nested loop (for each heading, scan forward) is O(n²) worst case.
-        // A single-pass stack-based approach could do this in O(n):
-        //   - Push headings onto a stack
-        //   - When a same-or-higher-level heading is encountered, pop and finalize
-        // This is left as future work since real-world files rarely have enough
-        // headings for the quadratic behavior to matter.
-
-        // STEP 5: Build the HeadingAnchorTarget and insert into the index.
-        // The target contains everything needed to navigate to this heading:
-        // - The final slug (with collision suffix if applicable)
-        // - The original heading text (for display/debugging)
-        // - The heading level (for understanding document structure)
-        // - The starting line number
-        // - The ending line number (computed in step 3)
-        // - The full section position (for virtual block injection)
+        // STEP 4: Build the HeadingAnchorTarget and insert into the index.
         const target: HeadingAnchorTarget = {
             type: "heading",
             slug: finalSlug,
@@ -207,9 +175,6 @@ export function buildDocumentIndex(cache: CachedMetadata): DocumentIndex {
             position: sectionPosition
         };
 
-        // Insert into the Map. If two headings somehow produce the same
-        // finalSlug (shouldn't happen with our collision handling, but
-        // defensive coding), the later one overwrites the earlier one.
         index.set(finalSlug, target);
     }
 

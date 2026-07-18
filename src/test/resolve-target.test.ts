@@ -33,7 +33,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { resolveGfmTarget, type GfmHeadingLinksPlugin } from "../resolve-target";
 import type { IndexCache } from "../index-cache";
-import type { DocumentIndex, AnchorTarget } from "../link-target";
+import type { DocumentIndex, AnchorTarget } from "../types";
 import { TFile } from "obsidian";
 
 /**

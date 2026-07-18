@@ -43,18 +43,59 @@
  */
 
 import { Plugin, TFile } from "obsidian";
-import type { ResolutionResult } from "./link-target";
+import type { ResolutionResult } from "./types";
 import type { IndexCache } from "./index-cache";
+import { isGfmSlug } from "./gfm-slugify";
+import { buildDocumentIndex } from "./document-index";
 
 /**
- * Extended Plugin interface that guarantees the presence of our IndexCache.
+ * Extended Plugin interface that guarantees the presence of our IndexCache
+ * and user-customizable settings.
  *
- * Obsidian's base `Plugin` class doesn't know about our custom cache. This interface extends it to add the `indexCache` property, allowing other modules to accept a `GfmHeadingLinksPlugin` and safely access `plugin.indexCache` without type assertions.
+ * Obsidian's base `Plugin` class doesn't know about our custom cache or
+ * settings. This interface extends it to add `indexCache` and `settings`,
+ * allowing other modules to accept a `GfmHeadingLinksPlugin` and safely
+ * access both without type assertions.
  *
- * This is the canonical "plugin reference" type used throughout the codebase. Any function that needs access to both Obsidian's API and our custom cache should accept this type rather than the base `Plugin` type.
+ * This is the canonical "plugin reference" type used throughout the codebase.
  */
 export interface GfmHeadingLinksPlugin extends Plugin {
     indexCache: IndexCache;
+    settings: { prefix: string; suffix: string; enableWikilinkAlias: boolean };
+}
+
+// ─── Shared resolution helpers (TASK-1012) ───
+// Extracted from resolveGfmTarget() and resolveGfmTargetSync() to eliminate
+// ~180 lines of duplicated guard, decode, and file-resolution logic.
+
+/**
+ * Guards and decodes a raw link slug against GFM conventions.
+ * Returns the decoded slug if it passes the GFM guard, or null if it
+ * should be handled by Obsidian's native resolver (passthrough).
+ */
+function decodeGfmSlug(rawSlug: string): string | null {
+    if (!isGfmSlug(rawSlug)) return null;
+    try {
+        return decodeURIComponent(rawSlug);
+    } catch {
+        return rawSlug;
+    }
+}
+
+/**
+ * Resolves a note path to a TFile in the vault.
+ * Handles both same-file links (notePath === "") and cross-file links.
+ */
+function resolveTargetFile(
+    plugin: GfmHeadingLinksPlugin,
+    notePath: string,
+    sourcePath: string
+): TFile | null {
+    if (notePath === "") {
+        const abstractFile = plugin.app.vault.getAbstractFileByPath(sourcePath);
+        return abstractFile instanceof TFile ? abstractFile : null;
+    }
+    return plugin.app.metadataCache.getFirstLinkpathDest(notePath, sourcePath);
 }
 
 /**
@@ -128,78 +169,83 @@ export async function resolveGfmTarget(
     rawSlug: string,
     sourcePath: string
 ): Promise<ResolutionResult> {
-    // ─── STAGE 1: Guard — Detect non-GFM links ───
-    //
-    // We apply a series of tests to determine if this slug looks like a GFM slug. If ANY test indicates it's NOT a GFM slug, we bail out immediately with "passthrough" — let Obsidian's native handler deal with it.
-    //
-    // The tests are ordered by likelihood for efficiency:
-    // - Empty slug check first (fastest, catches missing anchors)
-    // - Uppercase check (most Obsidian headings have uppercase)
-    // - URL-encoding check (rare but unambiguous)
-    // - Block reference check (^ is never in GFM slugs)
-    // - Footnote check ([^ is never in GFM slugs)
-    if (
-        rawSlug.length === 0 ||                          // No slug at all (e.g., "Note#")
-        /[A-Z]/.test(rawSlug) ||                         // Contains uppercase (Obsidian format)
-        /%[0-9A-Fa-f]{2}/.test(rawSlug) ||               // Contains URL encoding (%20, %2F, etc.)
-        rawSlug.startsWith("^") ||                        // Block reference (^block-id)
-        rawSlug.startsWith("[^")                          // Footnote reference ([^note])
-    ) {
-        return { type: "passthrough" };
-    }
+    // Stage 1+2: Guard and decode (shared helper)
+    const decodedSlug = decodeGfmSlug(rawSlug);
+    if (!decodedSlug) return { type: "passthrough" };
 
-    // ─── STAGE 2: URL Decode ───
-    //
-    // GFM slugs should not normally be URL-encoded, but we decode defensively. The try/catch handles malformed encoding like "%ZZ" (invalid hex). If decoding fails, we use the raw slug as-is.
-    let decodedSlug: string;
-    try {
-        decodedSlug = decodeURIComponent(rawSlug);
-    } catch {
-        decodedSlug = rawSlug;
-    }
+    // Stage 3: Resolve the target file (shared helper)
+    const file = resolveTargetFile(plugin, notePath, sourcePath);
+    if (!file) return { type: "file-not-found" };
 
-    // ─── STAGE 3: Resolve the target file ───
-    //
-    // Two cases:
-    // 1. Same-file link (notePath is empty): The target is in the same file as the link. We look up the sourcePath in the vault.
-    // 2. Cross-file link (notePath is provided): We use Obsidian's built-in link resolution which handles wikilinks, relative paths, and shortest-path matching.
-    let file: TFile | null = null;
-    if (notePath === "") {
-        // Same-file link: resolve the source file. We use getAbstractFileByPath which returns a TAbstractFile. We then check if it's actually a TFile (markdown file) rather than a folder or other abstract file type.
-        const abstractFile = plugin.app.vault.getAbstractFileByPath(sourcePath);
-        if (abstractFile instanceof TFile) {
-            file = abstractFile;
-        }
-    } else {
-        // Cross-file link: use Obsidian's link resolution engine. `getFirstLinkpathDest` handles:
-        // - Wikilinks: [[Note]] → finds Note.md
-        // - Relative paths: [[../OtherNote]] → resolves relative to sourcePath
-        // - Shortest path: [[ideas]] → finds the best match among all ideas.md files
-        file = plugin.app.metadataCache.getFirstLinkpathDest(notePath, sourcePath);
-    }
-
-    // If the file doesn't exist in the vault, we can't go anywhere. Return "file-not-found" so the caller can show Obsidian's native "file not found" behavior (e.g., creating the note on click).
-    if (!file) {
-        return { type: "file-not-found" };
-    }
-
-    // ─── STAGE 4: Look up the slug in the document index ───
-    //
-    // This is where the actual GFM resolution happens. plugin.indexCache.get() is lazy: if this file hasn't been indexed yet, it will compute the index now (reading file content + scanning headings). Subsequent calls for the same file return the cached index instantly.
+    // Stage 4: Look up the slug in the document index (async — with HTML anchors)
     const index = await plugin.indexCache.get(file);
     const target = index.get(decodedSlug);
 
-    if (target) {
-        // Found it! Return success with the target and file. The caller (patchWorkspace) will use target.position to inject a virtual block for native scrolling, and target.line for fallback reveal.
-        return { type: "success", target, file };
-    }
+    if (target) return { type: "success", target, file };
 
-    // ─── STAGE 5: Fallback — Let Obsidian handle it ───
-    //
-    // The slug wasn't found in our GFM index. This could mean:
-    // - It's a native Obsidian heading link that happened to pass our GFM guard (e.g., all-lowercase Obsidian heading)
-    // - The heading/HTML anchor genuinely doesn't exist (broken link)
-    //
-    // In either case, we return "passthrough" with the file set. Obsidian will at least open the correct file, and its native handler will deal with the heading resolution (or show "heading not found" if it's broken).
+    // Stage 5: Fallback
+    return { type: "passthrough", file };
+}
+
+/**
+ * Synchronous variant of `resolveGfmTarget` for hover-link interception.
+ *
+ * The hover-link event (`workspace.trigger('hover-link')`) must mutate the
+ * event payload synchronously before Obsidian processes it — async disk I/O
+ * (`vault.read()`) is not possible in that code path. This function provides
+ * the same GFM guard + file resolution + index lookup as the async variant,
+ * but without HTML anchor scanning (which requires reading file contents).
+ *
+ * ## Differences from `resolveGfmTarget`
+ *
+ * - **No HTML anchors**: Only heading-based targets are resolved. HTML anchors
+ *   require `vault.read()` which is async. The current hover handler already
+ *   skips HTML anchors, so this is parity, not regression.
+ * - **No IndexCache**: Calls `buildDocumentIndex()` directly from the metadata
+ *   cache. This is acceptable for hover events because:
+ *   1. The metadata cache is already in memory (no I/O).
+ *   2. Hover events are transient — caching benefit is minimal.
+ *   3. Keeping this sync avoids the complexity of a sync cache layer.
+ * - **Same return type**: Returns `ResolutionResult` with the same discriminated
+ *   union, so callers handle success/passthrough/file-not-found identically.
+ *
+ * @param plugin - The plugin instance, providing access to Obsidian's API.
+ * @param notePath - The path portion of the link (everything before `#`).
+ * @param rawSlug - The raw slug portion of the link (everything after `#`).
+ * @param sourcePath - The vault-relative path of the file containing the link.
+ * @returns A `ResolutionResult` — same shape as the async variant.
+ *
+ * @example
+ * ```ts
+ * const result = resolveGfmTargetSync(plugin, "", "my-heading", "notes/ideas.md");
+ * if (result.type === "success" && result.target?.type === "heading") {
+ *     injectVirtualBlock(cache, result.target.slug, result.target.position, "gfm-");
+ * }
+ * ```
+ */
+export function resolveGfmTargetSync(
+    plugin: GfmHeadingLinksPlugin,
+    notePath: string,
+    rawSlug: string,
+    sourcePath: string
+): ResolutionResult {
+    // Stage 1+2: Guard and decode
+    const decodedSlug = decodeGfmSlug(rawSlug);
+    if (!decodedSlug) return { type: "passthrough" };
+
+    // Stage 3: Resolve the target file
+    const file = resolveTargetFile(plugin, notePath, sourcePath);
+    if (!file) return { type: "file-not-found" };
+
+    // Stage 4: Build index from metadata cache (sync, no disk I/O)
+    const cache = plugin.app.metadataCache.getFileCache(file);
+    if (!cache || !cache.headings) return { type: "passthrough", file };
+
+    const index = buildDocumentIndex(cache);
+    const target = index.get(decodedSlug);
+
+    if (target) return { type: "success", target, file };
+
+    // Stage 5: Fallback
     return { type: "passthrough", file };
 }

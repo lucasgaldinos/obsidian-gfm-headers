@@ -3,7 +3,7 @@ title: "Design: How It Works"
 tags: [architecture, plan, design, internals]
 description: "5-layer architecture, data flows, design decisions, and known limitations."
 date_created: 2026-07-08
-date_changed: 2026-07-15
+date_changed: 2026-07-16
 author: ["Lucas Galdino", "GitHub Copilot"]
 plan_version: "2.0"
 parent: "[[plan.md]]"
@@ -12,6 +12,8 @@ parent: "[[plan.md]]"
 # Design: How It Works
 
 > See [`objectives.md`](objectives.md) for why, [`tasks.md`](tasks.md) for build order, [`validation.md`](validation/validation.md) for test coverage.
+>
+> **v1.3 (complete):** All 9 tasks done — 6 code quality refactoring + settings tab + wikilink alias + link affixes. See [Phase 10](tasks.md#phase-10-v13--code-quality-refactoring--settings--wikilink-alias).
 
 ## 1. Architecture Overview
 
@@ -20,10 +22,11 @@ The plugin uses a **5-layer architecture** with complementary interception point
 | Layer | Module | Intercepts | Mechanism |
 |---|---|---|---|
 | 1. Document Indexer | `document-index.ts`, `index-cache.ts` | (background) | Lazy `Map<gfmSlug, AnchorTarget>` per file, separate from Obsidian's cache |
-| 2. Router | `patch-workspace.ts` (`openLinkText`) | Click / programmatic navigation | Virtual Block Injection (`#^gfm-click-{slug}`) → native scroll + highlight |
+| 2. Router | `patch-link-click.ts` (`openLinkText`) | Click / programmatic navigation | Virtual Block Injection (`#^gfm-click-{slug}`) → native scroll + highlight |
 | 3. Autocomplete | `patch-editor-suggest.ts` (`EditorSuggest.selectSuggestion`) | Link creation dropdown | Mutates `value.subpath` to GFM slug before native insertion |
-| 4. Hover Preview | `patch-workspace.ts` (`trigger('hover-link')`) | Page Preview hover | Virtual Block Injection (`#^gfm-{slug}`) → native preview renderer |
+| 4. Hover Preview | `patch-link-hover.ts` (`trigger('hover-link')`) | Page Preview hover | Sync resolution via `resolveGfmTargetSync()` + Virtual Block Injection |
 | 5. Reveal Fallback | `reveal-target.ts` | Non-heading targets (HTML anchors) | `setEphemeralState` + `applyScroll(line, {highlight})` |
+| — Shared VBI | `virtual-block.ts` | (utility) | `injectVirtualBlock()` — single source for block injection + cleanup |
 
 **Key principle:** All layers feed from the same `DocumentIndex` (built from `MetadataCache.headings` + `scanHtmlAnchors()`), cached by `IndexCache`, invalidated on vault events. No Obsidian cache contamination.
 
@@ -88,11 +91,11 @@ openLinkText("Note.md#commands-1", sourcePath, ...rest) intercepted
 ### 2.2 Hover Preview (`trigger('hover-link')` interceptor)
 
 1. `workspace.trigger` is called with `"hover-link"` event.
-2. Interceptor extracts slug from `data.linktext`, applies the same GFM guard.
-3. Synchronously resolves the file and builds the DocumentIndex.
-4. For heading targets: injects a virtual block (`#^gfm-{slug}`) into `cache.blocks`, rewrites `data.linktext`, then calls `originalTrigger`.
+2. Interceptor extracts slug from `hoverEventPayload.linktext`, applies GFM guard via `isGfmSlug()`.
+3. Calls `resolveGfmTargetSync()` — synchronous variant using only metadata cache (no disk I/O, no HTML anchors).
+4. For heading targets: calls `injectVirtualBlock()` from `virtual-block.ts`, rewrites `hoverEventPayload.linktext` to `#^gfm-{slug}`, then calls `originalTrigger`.
 5. For HTML anchor targets: silently skipped (hover interceptor only handles `type: "heading"`). See [Bug 6](task-bugs.md#6-html-anchor-hover-inconsistency).
-6. Virtual block cleaned up after 1500ms.
+6. Virtual block auto-cleaned after `VIRTUAL_BLOCK_CLEANUP_MS` (1500ms) via cleanup callback.
 
 ### 2.3 Autocomplete (`EditorSuggest.selectSuggestion` interceptor)
 
@@ -193,7 +196,7 @@ Unaffected. Obsidian natively parses `[Link](Note.md#my-heading)` and adds it to
 
 3. **Autocomplete Monkeypatch (`EditorSuggest.selectSuggestion`):** Intercepts link generation via autocomplete dropdowns. Instead of patching `generateMarkdownLink` (which proved ineffective for `EditorSuggest` interactions), we mutate the native suggestion `value` object (`value.subpath`) directly before text insertion. This outputs `[Heading](#gfm-slug)` natively, while flawlessly resolving duplicate headings. → [TASK-0404](tasks.md#task-0404-implement-generatemarkdownlink--editorsuggest-monkeypatch).
 
-4. **Hover Monkeypatch (`trigger('hover-link')`):** Intercepts Page Preview requests. To natively support duplicate headings, this injects a temporary virtual block (`gfm-{slug}`) into `app.metadataCache.getFileCache(file).blocks`, rewrites the linktext to target this block, calls the original trigger so Obsidian's native preview renderer resolves it, and then cleans up the cache after 1500ms. → [TASK-0403](tasks.md#task-0403-update-triggerhover-link-interceptor).
+4. **Hover Monkeypatch (`trigger('hover-link')`):** Intercepts Page Preview requests. Uses `resolveGfmTargetSync()` (sync variant — metadata cache only, no disk I/O) to resolve the slug. Injects a temporary virtual block via `injectVirtualBlock()` from `virtual-block.ts`, rewrites the linktext, calls the original trigger so Obsidian's native preview renderer resolves it. Virtual block auto-cleaned after `VIRTUAL_BLOCK_CLEANUP_MS`. → [TASK-0403](tasks.md#task-0403-update-triggerhover-link-interceptor) + [TASK-1005](tasks.md#task-1005-unify-hover-link-resolution-with-indexcache-done) + [TASK-1006](tasks.md#task-1006-extract-shared-virtual-block-injection-utility-done).
 
 5. **Reveal Layer (`revealTargetLine`):** Shared service for scrolling to a line. Handles Preview mode (`applyScroll` with highlight), Source mode (`Editor.setCursor` + `Editor.scrollIntoView`), and manual `is-flashing` CSS fallback. → [TASK-0301](tasks.md#task-0301-implement-srcreveal-targetts).
 
@@ -235,17 +238,17 @@ HTML anchors only work for click navigation in **Reading mode**. Live Preview an
 
 **Root cause:** The `hover-link` interceptor in `workspace.trigger` checks `target.type === "heading"` before injecting a virtual block. HTML anchor targets silently fall through without injection.
 
-### 5.2 Editor Suggest Preserves Raw HTML
+### 5.2 Editor Suggest Preserves Raw HTML — RESOLVED
 
-**Bug:** [#7](task-bugs.md#7-editor-suggest-preserves-raw-html-in-heading-text)
+**Bug:** [#2](task-bugs.md#2-editor-suggest-preserves-raw-html-in-heading-text--resolved)
 
-Headings with inline HTML produce autocomplete aliases containing raw tags.
+HTML tags in heading text were preserved verbatim in autocomplete aliases. Fixed by stripping HTML tags from `value.heading` and `value.item.heading` with a regex + `.trim()`.
 
-### 5.3 GFM Collision Suffix: Last-Write-Wins
+### 5.3 GFM Collision Suffix: Cross-BaseSlug Collision — RESOLVED
 
-**Bug:** [#8](task-bugs.md#8-gfm-collision-suffix-ambiguity-the-commands-problem)
+**Bug:** [#3](task-bugs.md#3-gfm-collision-suffix-ambiguity-the-commands-problem--resolved)
 
-`Map.set()` overwrites — the last heading to produce a slug wins. `#commands-1` goes to the LAST occurrence, not the first. This is a bug, not just a GFM limitation.
+The per-baseSlug collision counter was blind to cross-baseSlug collisions. Fixed in v1.2.0+ by extracting `allocateUniqueSlug()` — a shared function that checks the actual set of used slugs rather than per-baseSlug counters. Both `buildDocumentIndex` and `resolveGfmSlug` use it, ensuring consistent slugs.
 
 ### 5.4 URL-Encoded Passthrough: Wikilinks vs Markdown Links
 
@@ -258,3 +261,34 @@ Obsidian natively decodes `%20` in markdown links before our interceptor sees th
 **Bug:** [#9](task-bugs.md#9-passthrough-links-produce-no-debug-output)
 
 Working as designed — guard-rejected slugs produce no debug output.
+
+### 5.6 GFM Slug Guard Duplicated Across Modules — RESOLVED
+
+**Tasks:** [TASK-1004](tasks.md#task-1004-extract-isgfmslug-shared-guard-function-done)
+
+**Found during code review (2026-07-16).** **Fixed 2026-07-16.** Extracted `isGfmSlug()` into `gfm-slugify.ts`. Both `resolve-target.ts` and `patch-link-hover.ts` import it. A critical inverted-condition bug was also discovered and fixed during extraction (the guard was passthrough-ing valid GFM slugs). 6 new unit tests (16 assertions) verify the predicate.
+
+### 5.7 Hover Resolution Forked from Main Pipeline — RESOLVED
+
+**Tasks:** [TASK-1005](tasks.md#task-1005-unify-hover-link-resolution-with-indexcache-done)
+
+**Found during code review (2026-07-16).** **Fixed 2026-07-16.** Added `resolveGfmTargetSync()` to `resolve-target.ts` — same guard + file resolution + `buildDocumentIndex(cache)`, no disk I/O. `patch-link-hover.ts` calls this instead of inline resolution. The `require("./document-index")` call eliminated. `tsc --noEmit` now passes with zero errors.
+
+### 5.8 Virtual Block Injection Duplicated — RESOLVED
+
+**Tasks:** [TASK-1006](tasks.md#task-1006-extract-shared-virtual-block-injection-utility-done)
+
+**Found during code review (2026-07-16).** **Fixed 2026-07-16.** Created `src/virtual-block.ts` with `injectVirtualBlock()` + `VIRTUAL_BLOCK_CLEANUP_MS = 1500` constant. Both `patch-link-click.ts` and `patch-link-hover.ts` use it. Cleanup callback pattern replaces naked `setTimeout`.
+
+### 5.9 patch-workspace.ts Violates Single Responsibility — RESOLVED
+
+**Tasks:** [TASK-1007](tasks.md#task-1007-split-patch-workspacets-by-responsibility-done)
+
+**Found during code review (2026-07-16).** **Fixed 2026-07-16.** `patch-workspace.ts` deleted. Replaced by `patch-link-click.ts` (`applyClickPatch`, async + HTML anchors) and `patch-link-hover.ts` (`applyHoverPatch`, sync, no HTML anchors). `main.ts` imports both separately.
+
+### 5.10 O(n²) Section Boundary Algorithm — RESOLVED
+
+**Tasks:** [TASK-1009](tasks.md#task-1009-stack-based-on-section-boundary-algorithm-done)
+
+**Found during code review (2026-07-16).** `buildDocumentIndex` computes section `endLine` using a nested loop: for each heading `i`, scan forward through headings `i+1..n` looking for the first heading with equal-or-higher level. This is O(n²) worst case. For typical files (<100 headings) this is negligible, but a stack-based single-pass algorithm (push headings → pop when same-or-higher level encountered) would be O(n) and simpler to reason about.
+**Fixed 2026-07-16.** Replaced nested loop with 2-pass approach: Pass 1 uses a stack to compute all `endLine`/`endOffset` values in O(n), Pass 2 builds `HeadingAnchorTarget` entries. All 25 existing tests pass unchanged. Code is both faster and simpler (no inner loop, no `break`).

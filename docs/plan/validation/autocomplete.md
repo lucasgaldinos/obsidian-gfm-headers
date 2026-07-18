@@ -44,11 +44,19 @@ The `EditorSuggest` interceptor in [`patch-editor-suggest.ts`](../../../src/patc
 
 ### Wikilinks (`Use Markdown Links = false`)
 
-| Heading type | Expected output | Current output | Status |
-| --- | --- | --- | --- |
-| Simple | `[[file#simple-heading\|Simple Heading]]` | `[[file#simple-heading]]` | ❌ Missing alias — [OBJ-009](../objectives.md#v2-objectives-deferred), [TASK-1001](../tasks.md#task-1001-wikilink-aware-editor-suggestions-todo) |
-| With HTML | `[[file#heading-a-idx-a\|Heading]]` | `[[file#heading-a-idx-a]]` | ❌ Missing alias + HTML in alias |
-| Duplicate | `[[file#heading-1\|Heading]]` | `[[file#heading-1]]` | ❌ Missing alias |
+| Heading type | Expected output | Status |
+| --- | --- | --- |
+| Simple | `[[file#simple-heading\|Simple Heading]]` | ✅ Working (v1.3) |
+| With HTML | `[[file#heading-a-idx-a\|Heading]]` | ✅ Working (v1.3) — HTML stripped, alias injected |
+| Duplicate | `[[file#heading-1\|Heading]]` | ✅ Working (v1.3) |
+| With affixes (prefix=§, suffix=¶) | `[[file#simple-heading\|§Simple Heading¶]]` | ✅ Working (v1.3) — affixes on alias |
+| Wikilink alias toggle OFF | `[[file#simple-heading]]` | ✅ Working (v1.3) — bare slug, no alias |
+
+### v1.3 Additions
+
+- **Wikilink Alias Auto-Injection** ([TASK-1001](../tasks.md#task-1001-wikilink-aware-editor-suggestions-done)): After Obsidian inserts `[[#slug]]`, the plugin appends `|Original Heading` via `editor.replaceRange`. Controlled by `plugin.settings.enableWikilinkAlias` toggle.
+- **Link Affixes** ([TASK-1002](../tasks.md#task-1002-user-customizable-link-affixes-done)): User-configurable prefix/suffix (e.g., `§`, `¶`) applied to the heading alias. Affixes are applied to `suggestionValue.heading` (the alias), not the slug.
+- **Wikilink Alias Toggle** ([TASK-1003](../tasks.md#task-1003-plugin-settings-tab-done)): Settings tab toggle to disable alias injection. When OFF, wikilinks produce bare `[[#slug]]`.
 
 ## Heading Type Matrix
 
@@ -85,7 +93,7 @@ The advanced `resolveGfmSlug(value, app, suggestInstance)` helper uses `suggestI
 | --- | --- | --- |
 | [Bug 2.1](../task-bugs.md#21-autocomplete-alias-loss--missing-duplicate-suffixes) | Alias loss + duplicate suffix resolution | **Resolved** — stop mutating `value.heading`, use dropdown occurrence index |
 | [Bug 7](../task-bugs.md#7-editor-suggest-preserves-raw-html-in-heading-text) | HTML tags preserved verbatim in alias text | **Resolved** — regex strip `<\/?[^>]+(>\|$)/g` + `.trim()` on `value.heading` |
-| [TASK-1001](../tasks.md#task-1001-wikilink-aware-editor-suggestions-todo) | Wikilinks missing `\|Original Heading` alias | Deferred to v2 |
+| [TASK-1001](../tasks.md#task-1001-wikilink-aware-editor-suggestions-done) | Wikilinks missing `\|Original Heading` alias | **Resolved (v1.3)** — post-insertion editor modification |
 
 ## Related Files
 

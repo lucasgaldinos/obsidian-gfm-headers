@@ -43,9 +43,111 @@
  * This is fragile (depends on dropdown order matching cache order), but it's the best we can do without Obsidian exposing line numbers in its suggestion values.
  */
 
-import { gfmSlugify } from "./gfm-slugify";
+import { gfmSlugify, allocateUniqueSlug } from "./gfm-slugify";
 import { debugLog } from "./debug";
 import type { GfmHeadingLinksPlugin } from "./resolve-target";
+
+/**
+ * Pure transformation pipeline for heading autocomplete suggestions.
+ *
+ * Applies 5 mutations in a fixed order to convert Obsidian's native heading
+ * format into a GFM-compliant link. Extracted from the `selectSuggestion`
+ * monkeypatch wrapper per TASK-1010 to enable independent unit testing
+ * without mocking Obsidian's suggestor infrastructure.
+ *
+ * ## Mutation order
+ *
+ * 1. **HTML stripping** — Remove inline HTML tags from heading aliases.
+ * 2. **GFM slug resolution** — Convert Obsidian heading text to GFM slug.
+ * 3. **Wikilink alias injection** — When wikilinks are enabled, set the
+ *    pipe-alias so output is `[[file#slug|Original Heading]]`.
+ * 4. **User affix application** — Apply prefix/suffix from plugin settings.
+ *
+ * @param suggestionValue - The suggestion object from Obsidian's EditorSuggest.
+ * @param plugin - The plugin instance for settings and app access.
+ * @param suggestInstance - The suggestor instance (for dropdown occurrence
+ *                          matching in duplicate heading resolution).
+ * @returns The mutated suggestionValue and a flag indicating whether the
+ *          subpath was modified.
+ */
+export function transformSuggestion(
+    suggestionValue: any,
+    plugin: GfmHeadingLinksPlugin,
+    suggestInstance?: any
+): { suggestionValue: any; didModifySubpath: boolean } {
+    if (!suggestionValue || typeof suggestionValue !== 'object') {
+        return { suggestionValue, didModifySubpath: false };
+    }
+
+    let didModifySubpath = false;
+
+    // Step 1: Strip HTML from heading alias (Bug 7 fix)
+    if (suggestionValue.heading && typeof suggestionValue.heading === 'string') {
+        suggestionValue.heading = suggestionValue.heading.replace(/<\/?[^>]+(>|$)/g, '').trim();
+    }
+    if (suggestionValue.item?.heading && typeof suggestionValue.item.heading === 'string') {
+        suggestionValue.item.heading = suggestionValue.item.heading.replace(/<\/?[^>]+(>|$)/g, '').trim();
+    }
+
+    // Step 2: GFM slug resolution — Case 1: Direct subpath
+    if (typeof suggestionValue.subpath === 'string') {
+        const exactSlug = resolveGfmSlug(suggestionValue, plugin.app, suggestInstance);
+        if (exactSlug) {
+            suggestionValue.subpath = exactSlug;
+        } else {
+            const raw = suggestionValue.subpath.startsWith('#')
+                ? suggestionValue.subpath.substring(1)
+                : suggestionValue.subpath;
+            suggestionValue.subpath = '#' + gfmSlugify(raw);
+        }
+        didModifySubpath = true;
+    }
+
+    // Step 2: GFM slug resolution — Case 2: Nested item.subpath
+    if (suggestionValue.item && typeof suggestionValue.item === 'object') {
+        if (typeof suggestionValue.item.subpath === 'string') {
+            const exactSlug = resolveGfmSlug(suggestionValue.item, plugin.app, suggestInstance);
+            if (exactSlug) {
+                suggestionValue.item.subpath = exactSlug;
+            } else {
+                const raw = suggestionValue.item.subpath.startsWith('#')
+                    ? suggestionValue.item.subpath.substring(1)
+                    : suggestionValue.item.subpath;
+                suggestionValue.item.subpath = '#' + gfmSlugify(raw);
+            }
+            didModifySubpath = true;
+        }
+    }
+
+    // Step 3: User-customizable link affixes (TASK-1002)
+    // Apply prefix/suffix to the heading/alias (display text), NOT the slug.
+    // The slug must remain clean for link resolution.
+    const prefix = plugin.settings.prefix || "";
+    const suffix = plugin.settings.suffix || "";
+    if (prefix || suffix) {
+        if (suggestionValue.heading && typeof suggestionValue.heading === 'string') {
+            suggestionValue.heading = `${prefix}${suggestionValue.heading}${suffix}`;
+        }
+        if (suggestionValue.item?.heading && typeof suggestionValue.item.heading === 'string') {
+            suggestionValue.item.heading = `${prefix}${suggestionValue.item.heading}${suffix}`;
+        }
+    }
+
+    // Step 4: Wikilink-aware editor suggestions (TASK-1001)
+    // When wikilinks are enabled, set the pipe-alias so Obsidian generates
+    // [[file#gfm-slug|Alias]] instead of just [[file#gfm-slug]].
+    const useMarkdownLinks = (plugin.app.vault as any).getConfig?.("useMarkdownLinks") ?? true;
+    if (!useMarkdownLinks) {
+        if (suggestionValue.heading) {
+            suggestionValue.alias = String(suggestionValue.heading);
+        }
+        if (suggestionValue.item?.heading) {
+            suggestionValue.item.alias = String(suggestionValue.item.heading);
+        }
+    }
+
+    return { suggestionValue, didModifySubpath };
+}
 
 /**
  * Resolves a heading suggestion value to its exact GFM slug by matching the dropdown position to the Nth occurrence of that heading in the file.
@@ -141,16 +243,15 @@ function resolveGfmSlug(value: any, app: any, suggestInstance?: any): string | n
     }
 
     // ─── STEP 2: Iterate the file cache and find the Nth matching heading ───
-    const slugCounts = new Map<string, number>();
+    // Uses allocateUniqueSlug() from gfm-slugify.ts — the same collision
+    // resolver used by buildDocumentIndex, guaranteeing consistent slugs.
+    const usedSlugs = new Set<string>();
     let matchedOccurrences = 0;
 
     for (const heading of cache.headings) {
-        // Generate the GFM slug for this heading (with collision suffix if needed).
-        // This mirrors exactly what buildDocumentIndex does, ensuring consistency.
         const baseSlug = gfmSlugify(heading.heading);
-        const count = slugCounts.get(baseSlug) || 0;
-        const finalSlug = count === 0 ? baseSlug : `${baseSlug}-${count}`;
-        slugCounts.set(baseSlug, count + 1);
+        const finalSlug = allocateUniqueSlug(baseSlug, usedSlugs);
+        usedSlugs.add(finalSlug);
 
         // Check if this heading matches the selected one (same text AND level).
         // Using both heading text and level prevents false matches when two
@@ -259,81 +360,38 @@ export function applyEditorSuggestPatches(plugin: GfmHeadingLinksPlugin): () => 
             // Replace with our wrapper function.
             // We use a regular function (not arrow) so `this` refers to the suggestor
             // instance when the original method is called.
-            suggest.selectSuggestion = function(value: any, evt: any) {
-                // value is the suggestion object that was selected by the user.
-                // evt is the keyboard/mouse event that triggered the selection.
+            suggest.selectSuggestion = function(suggestionValue: any, evt: any) {
                 try {
-                    debugLog("suggest:selected", { heading: value?.heading, level: value?.level });
-
-                    // Only attempt mutation if the value is a non-null object.
-                    // Primitive values (strings, numbers) are not heading suggestions.
-                    if (value && typeof value === 'object') {
-                        let mutated = false;
-
-                        // ─── Case 1: Direct subpath property ───
-                        // This is the common case for Obsidian's built-in heading suggestor.
-                        // The `subpath` is the part after `#` in the link, e.g., "My Heading".
-                        if (typeof value.subpath === 'string') {
-                            // First try the precise resolution (handles duplicates correctly).
-                            const exactSlug = resolveGfmSlug(value, plugin.app, this);
-                            if (exactSlug) {
-                                // exactSlug already includes the '#' prefix, e.g., "#my-heading-1".
-                                value.subpath = exactSlug;
-                            } else {
-                                // Fall back to simple slugification.
-                                // Strip existing '#' prefix if present, slugify, then re-add '#'.
-                                const raw = value.subpath.startsWith('#')
-                                    ? value.subpath.substring(1)
-                                    : value.subpath;
-                                value.subpath = '#' + gfmSlugify(raw);
-                            }
-                            mutated = true;
-                        }
-
-                        // ─── Case 2: Nested item.subpath property ───
-                        // Some suggestors wrap the actual value in an `item` property.
-                        // The logic is identical to Case 1, just one level deeper.
-                        if (value.item && typeof value.item === 'object') {
-                            if (typeof value.item.subpath === 'string') {
-                                const exactSlug = resolveGfmSlug(value.item, plugin.app, this);
-                                if (exactSlug) {
-                                    value.item.subpath = exactSlug;
-                                } else {
-                                    const raw = value.item.subpath.startsWith('#')
-                                        ? value.item.subpath.substring(1)
-                                        : value.item.subpath;
-                                    value.item.subpath = '#' + gfmSlugify(raw);
-                                }
-                                mutated = true;
-                            }
-                        }
-
-                        // ─── Strip HTML from heading alias (Bug 7 fix) ───
-                        // Headings containing inline HTML (e.g., "## Title <a id=\"x\"></a>") would otherwise preserve the raw HTML in the alias text. We strip AFTER slug resolution so the matching logic works correctly. `.trim()` removes whitespace left behind when the HTML tag was preceded/followed by spaces (e.g., "anchor <a>" → "anchor ").
-                        //
-                        //>[!QUESTION] Why there are 2 `if` statements? Are both necessary?
-                        //>[!FIX]`value` is a weak name. Naming must be redone.
-                        if (value.heading && typeof value.heading === 'string') {
-                            value.heading = value.heading.replace(/<\/?[^>]+(>|$)/g, '').trim();
-                        }
-                        if (value.item?.heading && typeof value.item.heading === 'string') {
-                            value.item.heading = value.item.heading.replace(/<\/?[^>]+(>|$)/g, '').trim();
-                        }
-
-
-                        // Log the mutation for debugging.
-                        // This helps verify that our interception is working correctly.
-                        if (mutated) {
-                            debugLog("suggest:mutated", { subpath: value?.subpath || value?.item?.subpath });
-                        }
+                    debugLog("suggest:selected", { heading: suggestionValue?.heading, level: suggestionValue?.level });
+                    const result = transformSuggestion(suggestionValue, plugin, this);
+                    suggestionValue = result.suggestionValue;
+                    // Capture the heading WITH affixes for wikilink alias injection
+                    const displayHeading = suggestionValue?.heading || suggestionValue?.item?.heading;
+                    if (result.didModifySubpath) {
+                        debugLog("suggest:mutated", { subpath: suggestionValue?.subpath || suggestionValue?.item?.subpath });
                     }
                 } catch (e) {
-                    // If ANYTHING goes wrong in our interception, log the error and continue with the original method unchanged. We must never break the user's autocomplete — a broken suggestor is worse than one that just doesn't rewrite slugs.
                     console.error("[GFM Heading Links] Error in editorSuggest patch:", e);
                 }
 
-                // Always call the original method, even if our mutation failed. This ensures the autocomplete still works normally. We use .call(this, ...) to preserve the suggestor's `this` context.
-                return originalSelectSuggestion.call(this, value, evt);
+                // Let Obsidian insert the link text first
+                originalSelectSuggestion.call(this, suggestionValue, evt);
+
+                // TASK-1001: For wikilinks, inject |Heading alias after insertion
+                // Uses workspace.activeEditor since suggestor context has no editor.
+                const useMarkdownLinks = (plugin.app.vault as any).getConfig?.("useMarkdownLinks");
+                if (plugin.settings.enableWikilinkAlias && useMarkdownLinks === false && suggestionValue?.heading) {
+                    const editor = plugin.app.workspace.activeEditor?.editor;
+                    if (editor) {
+                        const cursor = editor.getCursor();
+                        // Replace the closing ]] with |Heading]]
+                        editor.replaceRange(
+                            '|' + suggestionValue.heading + ']]',
+                            { line: cursor.line, ch: Math.max(0, cursor.ch - 2) },
+                            cursor
+                        );
+                    }
+                }
             };
 
             // Push a cleanup function that restores this suggestor's original method. When the plugin is unloaded, we iterate these and undo all patches.

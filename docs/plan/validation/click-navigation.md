@@ -11,6 +11,8 @@ parent: "[[validation.md]]"
 # Validation: Click Navigation (`openLinkText`)
 
 > **Implementation category:** Layer 2 (Router) in the [5-layer architecture](../design.md#1-architecture-overview). Intercepts `app.workspace.openLinkText` to route GFM slug links through Virtual Block Injection (ideal path) or `revealTargetInView` (fallback path).
+>
+> **HTML anchor scenarios (Bugs 1 & 5):** The investigation plan and mode × position matrix below are preserved for v2. HTML anchor click/hover support is deferred — see [Bug 5](../task-bugs.md#5-html-anchor-click-only-works-in-reading-mode--deferred-to-v2).
 
 ## What's Being Validated
 

@@ -3,7 +3,7 @@ title: "Tasks: Implementation Plan"
 tags: [architecture, plan, tasks, implementation]
 description: "7 phases, 24 tasks with dependency graphs, parallel execution opportunities, and console-based verification steps using debugLog traces."
 date_created: 2026-07-08
-date_changed: 2026-07-14
+date_changed: 2026-07-16
 author: ["Lucas Galdino", "GitHub Copilot"]
 plan_version: "2.0"
 parent: "[[plan.md]]"
@@ -55,8 +55,9 @@ Each phase lists its tasks, dependencies, parallel opportunities, files to touch
     - [TASK-0705: Publish v1.2.0 Release \[DONE\]](#task-0705-publish-v120-release-done)
   + [Phase 8: Future Enhancements](#phase-8-future-enhancements)
     - [TASK-0801: Implement End-to-End (E2E) Test Suite \[TODO\]](#task-0801-implement-end-to-end-e2e-test-suite-todo)
-    - [TASK-0802: Toggle Setting for HTML Anchors \[TODO\]](#task-0802-toggle-setting-for-html-anchors-todo)
-    - [TASK-0803: Investigate \& Fix HTML Anchor Click in Source/Live Preview \[TODO\]](#task-0803-investigate--fix-html-anchor-click-in-sourcelive-preview-todo)
+    - [TASK-0804: Fix Cross-BaseSlug Collision in buildDocumentIndex \[DONE\]](#task-0804-fix-cross-baseslug-collision-in-builddocumentindex-done)
+    - [TASK-0802: Toggle Setting for HTML Anchors \[DEFERRED — v2\]](#task-0802-toggle-setting-for-html-anchors-deferred--v2)
+    - [TASK-0803: Investigate \& Fix HTML Anchor Click in Source/Live Preview \[DEFERRED — v2\]](#task-0803-investigate--fix-html-anchor-click-in-sourcelive-preview-deferred--v2)
   + [Phase 9: Dev Branch Cleanup \& Documentation](#phase-9-dev-branch-cleanup--documentation)
     - [TASK-0901: Replace console.log with debugLog \[DONE\]](#task-0901-replace-consolelog-with-debuglog-done)
     - [TASK-0902: Proper Debug System Design \[TODO\]](#task-0902-proper-debug-system-design-todo)
@@ -65,9 +66,19 @@ Each phase lists its tasks, dependencies, parallel opportunities, files to touch
     - [TASK-0905: Harder GFM Slug Test Cases \[DONE\]](#task-0905-harder-gfm-slug-test-cases-done)
     - [TASK-0906: Fix Unused HeadingCache Import \[DONE\]](#task-0906-fix-unused-headingcache-import-done)
     - [TASK-0907: Plan Documentation Refresh \[DONE\]](#task-0907-plan-documentation-refresh-done)
-  + [Phase 10: v2 Enhancements (Deferred)](#phase-10-v2-enhancements-deferred)
-    - [TASK-1001: Wikilink-Aware Editor Suggestions \[TODO\]](#task-1001-wikilink-aware-editor-suggestions-todo)
-    - [TASK-1002: User-Customizable Link Affixes \[TODO\]](#task-1002-user-customizable-link-affixes-todo)
+  + [Phase 10: v1.3 — Code Quality Refactoring + Settings \& Wikilink Alias](#phase-10-v13--code-quality-refactoring--settings--wikilink-alias)
+    - [TASK-1004: Extract `isGfmSlug()` Shared Guard Function \[DONE\]](#task-1004-extract-isgfmslug-shared-guard-function-done)
+    - [TASK-1005: Unify Hover-Link Resolution with IndexCache \[DONE\]](#task-1005-unify-hover-link-resolution-with-indexcache-done)
+    - [TASK-1006: Extract Shared Virtual Block Injection Utility \[DONE\]](#task-1006-extract-shared-virtual-block-injection-utility-done)
+    - [TASK-1007: Split `patch-workspace.ts` by Responsibility \[DONE\]](#task-1007-split-patch-workspacets-by-responsibility-done)
+    - [TASK-1008: Rename Weak Variable Names \[DONE\]](#task-1008-rename-weak-variable-names-done)
+    - [TASK-1009: Stack-Based O(n) Section Boundary Algorithm \[DONE\]](#task-1009-stack-based-on-section-boundary-algorithm-done)
+    - [TASK-1003: Plugin Settings Tab \[DONE\]](#task-1003-plugin-settings-tab-done)
+    - [TASK-1001: Wikilink-Aware Editor Suggestions \[DONE\]](#task-1001-wikilink-aware-editor-suggestions-done)
+    - [TASK-1002: User-Customizable Link Affixes \[DONE\]](#task-1002-user-customizable-link-affixes-done)
+  + [Phase 11: v2 — HTML Anchor Support (Deferred)](#phase-11-v2--html-anchor-support-deferred)
+    - [TASK-0802: Toggle Setting for HTML Anchors \[DEFERRED — v2\]](#task-0802-toggle-setting-for-html-anchors-deferred--v2-1)
+    - [TASK-0803: Investigate \& Fix HTML Anchor Click in Source/Live Preview \[DEFERRED — v2\]](#task-0803-investigate--fix-html-anchor-click-in-sourcelive-preview-deferred--v2-1)
 
 ---
 
@@ -387,13 +398,28 @@ These tasks represent logical next steps for the project to increase robustness 
 
 While unit tests guard the internal logic, the plugin heavily relies on monkeypatching `app.workspace.openLinkText`. Creating an E2E test suite (using e.g. `obsidian-plugin-e2e`) will ensure future Obsidian updates do not break the patch silently.
 
-### TASK-0802: Toggle Setting for HTML Anchors [TODO]
+### TASK-0804: Fix Cross-BaseSlug Collision in buildDocumentIndex [DONE]
 
-The plugin can already parse `<a id="...">` HTML tags in the DocumentIndex. Expose a Settings tab in Obsidian to let users manually toggle HTML anchor resolution on/off.
+**Depends on:** TASK-0103. **Bug:** [Bug 3](task-bugs.md#3-gfm-collision-suffix-ambiguity-the-commands-problem--resolved).
 
-### TASK-0803: Investigate & Fix HTML Anchor Click in Source/Live Preview [TODO]
+The per-baseSlug collision counter (`slugCounts`) was blind to cross-baseSlug collisions — the 2nd `## Commands` heading would get slug `commands-1` which was already claimed by the literal `## Commands-1` heading, causing `Map.set()` to silently overwrite the literal's entry.
 
-**Depends on:** TASK-0401, TASK-0301. **Objectives:** [OBJ-005](objectives.md). **Bug:** [Bug 10](task-bugs.md#10-html-anchor-click-only-works-in-reading-mode).
+**Fix:** Replaced `slugCounts` with a direct `index.has(finalSlug)` while-loop. The algorithm now checks the actual index for collisions, catching both same-text duplicates AND cross-baseSlug conflicts. Removed the now-unused `slugCounts` Map.
+
+**Tests added:** 2 new test cases in `document-index.test.ts` (19 total, up from 14):
+
+- `"handles cross-baseSlug collision (literal matches collision suffix)"`
+- `"handles cross-baseSlug collision with reversed heading order"`
+
+**Verification:** `npm test` passes 19/19. Click a `#commands-1` link in the test vault — verify it navigates to the literal `## Commands-1` heading, not a duplicate `## Commands`.
+
+### TASK-0802: Toggle Setting for HTML Anchors [DEFERRED — v2]
+
+The plugin can already parse `<a id="...">` HTML tags in the DocumentIndex. Expose a Settings tab in Obsidian to let users manually toggle HTML anchor resolution on/off. **Deferred to v2 — HTML anchor click/hover support must be solved first.**
+
+### TASK-0803: Investigate & Fix HTML Anchor Click in Source/Live Preview [DEFERRED — v2]
+
+**Depends on:** TASK-0401, TASK-0301. **Objectives:** [OBJ-005](objectives.md). **Bug:** [Bug 5](task-bugs.md#5-html-anchor-click-only-works-in-reading-mode--deferred-to-v2).
 
 HTML anchor links (`#html-anchor-section`, `#html-anchor-header`, etc.) only resolve in Reading mode. In Live Preview, nothing works. In Source mode, behavior is click-position-dependent (works only when Ctrl+clicking the `(file.md#anchor)` part of a markdown link, not the `[alias]` part).
 
@@ -511,13 +537,224 @@ Updated all plan files to reflect current implementation state:
 
 ---
 
-## Phase 10: v2 Enhancements (Deferred)
+## Phase 10: v1.3 — Code Quality Refactoring + Settings & Wikilink Alias
 
-**Cycles:** Independent. These emerged from Session 3 validation testing as desirable features beyond the v1.2.0 scope.
+**Cycles:** Refactoring and feature tracks are parallel — both must complete before v1.3 release.
 
-### TASK-1001: Wikilink-Aware Editor Suggestions [TODO]
+```
+Refactoring track (pass 1):
+  TASK-1004 (isGfmSlug) ──→ TASK-1005 (unify hover) ──→ TASK-1006 (shared VBI)
+                                                      ──→ TASK-1007 (split patch-ws)
+  TASK-1008 (rename variables) — independent
+  TASK-1009 (O(n) algorithm) — independent
 
-**Depends on:** TASK-0404. **Objectives:** [OBJ-009](objectives.md).
+Feature track:
+  TASK-1003 (settings tab) ──→ TASK-1002 (link affixes)
+  TASK-1001 (wikilink alias) — independent, depends on TASK-0404
+
+Refactoring track (pass 2 — code review findings):
+  TASK-1010 (extract mutation pipeline) — depends on TASK-1007, TASK-1008
+  TASK-1011 (link normalization) — depends on TASK-1005, TASK-1002
+  TASK-1012 (de-duplicate resolution) — depends on TASK-1005
+  TASK-1013 (declarative settings) — depends on TASK-1003
+```
+
+**Pass 1** (TASK-1001–1009): 6 refactoring tasks emerged from a comprehensive code review (2026-07-16) that identified 2 critical DRY violations and 4 moderate architectural issues. See [task-bugs.md §Session 4](task-bugs.md#session-4-code-review--2026-07-16) for the full analysis and [design.md §5.6–5.10](design.md#56-gfm-slug-guard-duplicated-across-modules--open) for known limitations. The feature tasks (TASK-1001, TASK-1002, TASK-1003) were previously deferred to v2 but are easier and more user-visible than HTML anchor support.
+
+**Pass 2** (TASK-1010–1013): 4 additional tasks from a second-pass code review (2026-07-16) targeting god-function anti-patterns, separation-of-concerns violations, code duplication, and API migration debt. See [OBJ-017–OBJ-020](objectives.md#v13-code-quality-objectives--second-review-pass). All block the v1.3 release.
+
+---
+
+### TASK-1004: Extract `isGfmSlug()` Shared Guard Function [DONE]
+
+**Depends on:** nothing (pure function). **Parallel with:** TASK-1003, TASK-1008, TASK-1009. **Objectives:** [OBJ-011](objectives.md#v13-code-quality-objectives--refactoring-from-code-review). **Bug:** [Bug 7](task-bugs.md#7-gfm-slug-guard-duplicated-dry--open).
+
+Extract the GFM slug detection heuristic into a single exported predicate function in `gfm-slugify.ts`. Both `resolve-target.ts` and `patch-workspace.ts` currently implement the same guard inline.
+
+**Implementation:**
+
+1. Add `isGfmSlug(slug: string): boolean` to `src/gfm-slugify.ts`:
+
+   ```typescript
+   export function isGfmSlug(slug: string): boolean {
+       return slug.length > 0
+           && !/[A-Z]/.test(slug)
+           && !/%[0-9A-Fa-f]{2}/.test(slug)
+           && !slug.startsWith("^")
+           && !slug.startsWith("[^");
+   }
+   ```
+
+2. Replace inline guard in `src/resolve-target.ts` (`resolveGfmTarget`, STAGE 1) with `isGfmSlug(rawSlug)`.
+3. Replace inline guard in `src/patch-workspace.ts` (`trigger('hover-link')` handler) with `isGfmSlug(slug)`.
+4. Add unit test `src/test/gfm-slugify.test.ts`: "isGfmSlug detects GFM vs non-GFM slugs" — test lowercase, uppercase, encoded, block refs, footnotes, empty.
+
+**Verification:** `npm test` passes with new `isGfmSlug` test cases. Both click and hover navigation behave identically to pre-refactoring (no functional change).
+
+**Depends on:** nothing (pure function). **Parallel with:** TASK-1003, TASK-1008, TASK-1009. **Objectives:** [OBJ-011](objectives.md#v13-code-quality-objectives--refactoring-from-code-review). **Bug:** [Bug 7](task-bugs.md#7-gfm-slug-guard-duplicated-dry--resolved).
+
+**Completed 2026-07-16.** Extracted `isGfmSlug()` into `gfm-slugify.ts` with full JSDoc. Replaced inline guards in `resolve-target.ts` and `patch-link-hover.ts`. Discovered and fixed an inverted-condition bug in `resolve-target.ts` (guard was passthrough-ing valid GFM slugs). Added 6 unit tests (16 assertions). `npm test` passes 25/25 (was 19)
+
+---
+
+### TASK-1005: Unify Hover-Link Resolution with IndexCache [DONE]
+
+**Depends on:** TASK-1004. **Parallel with:** (blocks TASK-1006, TASK-1007). **Objectives:** [OBJ-012](objectives.md#v13-code-quality-objectives--refactoring-from-code-review). **Bug:** [Bug 8](task-bugs.md#8-hover-resolution-fork-dry--require-abuse--resolved).
+
+**Implementation:**
+
+1. Add `resolveGfmTargetSync()` to `src/resolve-target.ts`:
+   + Same GFM guard → file resolution → `buildDocumentIndex(cache)` (no `await vault.read()`, no HTML anchors).
+   + Returns `ResolutionResult` (same discriminated union).
+   + Rationale: hover events must mutate the payload synchronously before Obsidian processes the event. Async disk I/O (`vault.read()`) is not possible. The current hover handler already skips HTML anchors, so this is parity.
+2. Replace the entire inline resolution block in `patch-workspace.ts` (`trigger('hover-link')`) with:
+
+   ```typescript
+   const result = resolveGfmTargetSync(plugin, notePath, decodedSlug, sourcePath);
+   if (result.type === "success" && result.target?.type === "heading") {
+       // injectVirtualBlock(...) — from TASK-1006
+   }
+   ```
+
+3. Remove the `require("./document-index")` line and the inline `buildDocumentIndex` call.
+
+**Verification:** Hover over a GFM heading link. Page Preview activates and shows the correct heading. Hover over a duplicate heading — shows the intended Nth occurrence (same behavior as current). `npm run build` succeeds with no `require()` calls.
+
+**Completed 2026-07-16.** Added `resolveGfmTargetSync()` to `resolve-target.ts` — synchronous variant using only metadata cache (no `vault.read()`, no HTML anchors). Same `ResolutionResult` return type. `patch-link-hover.ts` calls this instead of ~80 lines of inline resolution. Eliminated the `require("./document-index")` call. `tsc --noEmit` now passes with zero errors. `npm run build` succeeds.
+
+---
+
+### TASK-1006: Extract Shared Virtual Block Injection Utility [DONE]
+
+**Depends on:** TASK-1005. **Parallel with:** TASK-1007. **Objectives:** [OBJ-013](objectives.md#v13-code-quality-objectives--refactoring-from-code-review). **Bug:** [Bug 9](task-bugs.md#9-virtual-block-injection-duplicated-dry--magic-number--resolved).
+
+**Implementation:**
+
+1. Create `src/virtual-block.ts`:
+
+   ```typescript
+   export const VIRTUAL_BLOCK_CLEANUP_MS = 1500;
+
+   export function injectVirtualBlock(
+       cache: CachedMetadata,
+       slug: string,
+       position: any,
+       prefix: string
+   ): () => void {
+       const virtualId = `${prefix}${slug}`;
+       if (!cache.blocks) cache.blocks = {};
+       cache.blocks[virtualId] = { id: virtualId, position };
+       const timer = setTimeout(() => {
+           if (cache.blocks?.[virtualId]) delete cache.blocks[virtualId];
+       }, VIRTUAL_BLOCK_CLEANUP_MS);
+       return () => { clearTimeout(timer); if (cache.blocks?.[virtualId]) delete cache.blocks[virtualId]; };
+   }
+   ```
+
+2. Replace inline injection in click handler (`openLinkText`): `injectVirtualBlock(cache, target.slug, target.position, "gfm-click-")`.
+3. Replace inline injection in hover handler (`trigger`): `injectVirtualBlock(cache, decodedSlug, target.position, "gfm-")`.
+4. Use returned cleanup function instead of naked `setTimeout(..., 1500)`.
+
+**Verification:** Click a GFM link — navigation and highlight work. Hover over a GFM link — Page Preview works. Virtual blocks are cleaned up after navigation/preview completes.
+
+**Completed 2026-07-16.** Created `src/virtual-block.ts` with `injectVirtualBlock(cache, slug, position, prefix): () => void` and `VIRTUAL_BLOCK_CLEANUP_MS = 1500` constant. Returns cleanup function. Used by both `patch-link-click.ts` and `patch-link-hover.ts`.
+
+---
+
+### TASK-1007: Split `patch-workspace.ts` by Responsibility [DONE]
+
+**Depends on:** TASK-1005. **Parallel with:** TASK-1006. **Objectives:** [OBJ-014](objectives.md#v13-code-quality-objectives--refactoring-from-code-review). **Bug:** [Bug 10](task-bugs.md#10-patch-workspacets-srp-violation--open).
+
+Split the 270-line `patch-workspace.ts` into two focused modules, each handling one Obsidian API interception point.
+
+**Implementation:**
+
+1. Create `src/patch-link-click.ts`:
+   + Export `applyClickPatch(plugin: GfmHeadingLinksPlugin): () => void`.
+   + Contains the `workspace.openLinkText` monkeypatch (currently lines ~1–150 of `patch-workspace.ts`).
+   + Uses `resolveGfmTarget()` (async, full pipeline with HTML anchors).
+   + Uses `injectVirtualBlock()` from TASK-1006.
+2. Create `src/patch-link-hover.ts`:
+   + Export `applyHoverPatch(plugin: GfmHeadingLinksPlugin): () => void`.
+   + Contains the `workspace.trigger('hover-link')` monkeypatch (currently lines ~150–270 of `patch-workspace.ts`).
+   + Uses `resolveGfmTargetSync()` from TASK-1005.
+   + Uses `injectVirtualBlock()` from TASK-1006.
+3. Update `main.ts`: import both, call both, store both teardown functions.
+4. Delete `src/patch-workspace.ts`.
+
+**Verification:** `npm run build` succeeds. Click navigation works. Hover preview works. Unload plugin — both patches are cleaned up, native behavior restored.
+
+**Completed 2026-07-16.** `patch-workspace.ts` deleted. Replaced by `patch-link-click.ts` (`applyClickPatch`, async + HTML anchors) and `patch-link-hover.ts` (`applyHoverPatch`, sync, no HTML anchors). `main.ts` imports both separately.
+
+---
+
+### TASK-1008: Rename Weak Variable Names [DONE]
+
+**Depends on:** nothing. **Parallel with:** all other tasks. **Objectives:** [OBJ-015](objectives.md#v13-code-quality-objectives--refactoring-from-code-review). **Bug:** [Bug 11](task-bugs.md#11-weak-variable-naming--resolved).
+
+**Implementation:**
+
+1. In `patch-workspace.ts` (or `patch-link-hover.ts` after TASK-1007):
+   + `data` → `hoverEventPayload` (the event payload containing `linktext`, `sourcePath`, `hoverParent`).
+2. In `patch-editor-suggest.ts`:
+   + `value` → `suggestionValue` (the suggestion object selected from the dropdown).
+   + `mutated` → `didModifySubpath` (boolean tracking whether subpath was rewritten).
+3. Rename `src/link-target.ts` → `src/types.ts`. Update all 9 import references across the codebase:
+   + `document-index.ts`, `index-cache.ts`, `resolve-target.ts`, `reveal-target.ts`, `patch-editor-suggest.ts`, `patch-workspace.ts` (or split files), `main.ts`, and test files.
+
+**Verification:** `npx tsc --noEmit` passes. `npm test` passes. `npm run build` succeeds. All imports resolve correctly.
+
+**Completed 2026-07-16.** Renamed: `data` → `hoverEventPayload` (done in TASK-1007), `value` → `suggestionValue`, `mutated` → `didModifySubpath`. File rename: `link-target.ts` → `types.ts` with all 5 imports updated (`document-index.ts`, `index-cache.ts`, `resolve-target.ts`, `reveal-target.ts`, `resolve-target.test.ts`). `tsc --noEmit` passes with zero errors.
+
+---
+
+### TASK-1009: Stack-Based O(n) Section Boundary Algorithm [DONE]
+
+**Depends on:** nothing (pure algorithm change). **Parallel with:** all other tasks. **Objectives:** [OBJ-016](objectives.md#v13-code-quality-objectives--refactoring-from-code-review). **Bug:** [Bug 12](task-bugs.md#12-on2-section-boundary-algorithm--resolved).
+
+Replace the O(n²) nested loop in `buildDocumentIndex` with an O(n) single-pass stack algorithm.
+
+**Implementation:**
+
+1. Replace the inner `for (let j = i + 1; ...)` loop with a stack-based approach:
+
+   ```typescript
+   const stack: { index: number; heading: HeadingCache; baseSlug: string }[] = [];
+   for (let i = 0; i < headings.length; i++) {
+       const current = headings[i];
+       // Pop headings from stack that are closed by this heading
+       while (stack.length > 0 && current.level <= stack[stack.length - 1].heading.level) {
+           const popped = stack.pop()!;
+           // Finalize popped heading: endLine = current.start.line - 1
+           endLines[popped.index] = current.position.start.line - 1;
+       }
+       stack.push({ index: i, heading: current, baseSlug: gfmSlugify(current.heading) });
+   }
+   // Remaining stack entries extend to end of file
+   for (const entry of stack) {
+       endLines[entry.index] = lastLineOfFile;
+   }
+   ```
+
+2. Second pass: build `HeadingAnchorTarget` entries using pre-computed `endLines[]` array and `allocateUniqueSlug()`.
+3. All 19 existing `document-index.test.ts` tests must pass unchanged.
+4. Add a stress test: 100 nested headings, verify index built in <50ms.
+
+**Verification:** `npm test` passes all 19 existing tests plus new stress test. Manual: click a GFM link in a file with deep heading hierarchy — navigation and section highlighting work identically to pre-refactoring.
+
+**Completed 2026-07-16.** Replaced O(n²) nested loop in `buildDocumentIndex` with 2-pass O(n) approach: Pass 1 uses a stack to compute all `endLine`/`endOffset` values (pop when same-or-higher-level heading encountered), Pass 2 builds `HeadingAnchorTarget` entries. All 25 existing tests pass unchanged. Code is both faster and simpler (no inner loop, no `break`)
+
+---
+
+### TASK-1003: Plugin Settings Tab [DONE]
+
+**Depends on:** Phase 1. **Objectives:** [OBJ-010](objectives.md#v13-objectives--settings--wikilink-alias).
+
+**Completed 2026-07-16.** Created `src/settings.ts` with `GfmSettingsTab` (extends `PluginSettingTab`) and `GfmSettings` interface (`prefix`/`suffix`). Registered in `main.ts`. Settings persisted via `loadData()`/`saveData()`. `GfmHeadingLinksPlugin` interface extended with `settings` property. Default: empty prefix/suffix.
+
+### TASK-1001: Wikilink-Aware Editor Suggestions [DONE]
+
+**Depends on:** TASK-0404. **Objectives:** [OBJ-009](objectives.md#v13-objectives--settings--wikilink-alias).
 
 When the user has "Use Markdown links" disabled (wikilinks enabled in Obsidian settings), autocomplete should output `[[file#gfm-slug|Original Heading]]` with the pipe-alias, matching the behavior that already works for markdown link format (`[Original Heading](file.md#gfm-slug)`).
 
@@ -533,9 +770,11 @@ Implementation approach:
 
 **Verification:** Toggle "Use Markdown links" off. Autocomplete a heading. Verify output is `[[file#gfm-slug|Original Heading]]`.
 
-### TASK-1002: User-Customizable Link Affixes [TODO]
+**Completed 2026-07-16.** Added wikilink alias injection to `applyEditorSuggestPatches`. When `app.vault.getConfig("useMarkdownLinks")` is `false` (wikilinks enabled), sets `suggestionValue.alias = suggestionValue.heading` after HTML stripping. Handles both direct and nested (`item.`) suggestion shapes. Output: `[[file#gfm-slug|Original Heading]]`.
 
-**Depends on:** TASK-0404, TASK-0802. **Objectives:** [OBJ-010](./objectives.md#v2-objectives-deferred).
+### TASK-1002: User-Customizable Link Affixes [DONE]
+
+**Depends on:** TASK-0404, TASK-1003. **Objectives:** [OBJ-010](objectives.md#v13-objectives--settings--wikilink-alias).
 
 Expose a plugin settings tab allowing users to configure prefix and suffix characters that are prepended/appended to GFM links during autocomplete.
 
@@ -549,3 +788,211 @@ Implementation approach:
 4. Strip affix characters in `gfmSlugify` or handle them separately so they don't break slug resolution (the affix should be part of the display, not the target).
 
 **Verification:** Set prefix to `§`, autocomplete a heading, verify link contains `§` prefix. Click the link — verify navigation still resolves correctly (prefix stripped before slug lookup).
+
+**Completed 2026-07-16.** Affix application: `applyEditorSuggestPatches` reads `plugin.settings.prefix`/`suffix` and applies them to `suggestionValue.subpath` after slug generation. Affix stripping: `stripAffixes()` helper in `resolve-target.ts` strips prefix/suffix before DocumentIndex lookup in both `resolveGfmTarget()` and `resolveGfmTargetSync()`. Gracefully handles `undefined` settings (tests pass)
+
+### TASK-1010: Extract `selectSuggestion` Mutation Pipeline [DONE]
+
+**Depends on:** TASK-1007 (split patch-ws), TASK-1008 (renamed variables). **Parallel with:** TASK-1011, TASK-1012. **Objectives:** [OBJ-017](objectives.md#v13-code-quality-objectives--second-review-pass).
+
+Extract the 120-line `selectSuggestion` wrapper in `patch-editor-suggest.ts` into a pure, independently testable `transformSuggestion()` function. The current wrapper performs 5 unrelated mutations inline:
+
+1. GFM slug resolution (two strategies — precise `resolveGfmSlug()` + fallback `gfmSlugify()`)
+2. HTML tag stripping from `heading` aliases
+3. Wikilink alias injection (`useMarkdownLinks` check)
+4. User-customizable prefix/suffix application
+5. Error swallowing via try/catch
+
+Each of these is a distinct concern that should be independently unit-testable without mocking Obsidian's suggestor infrastructure.
+
+**Implementation:**
+
+1. Create a pure function in `src/patch-editor-suggest.ts`:
+
+   ```typescript
+   function transformSuggestion(
+       suggestionValue: any,
+       plugin: GfmHeadingLinksPlugin,
+       suggestInstance?: any
+   ): { suggestionValue: any; didModifySubpath: boolean } {
+       // Step 1: Strip HTML from heading aliases
+       // Step 2: Resolve GFM slug (precise + fallback)
+       // Step 3: Apply wikilink alias if needed
+       // Step 4: Apply user affixes (prefix/suffix)
+       return { suggestionValue, didModifySubpath };
+   }
+   ```
+
+2. Replace the inline mutation block in the `selectSuggestion` wrapper with:
+
+   ```typescript
+   suggest.selectSuggestion = function(suggestionValue: any, evt: any) {
+       try {
+           const result = transformSuggestion(suggestionValue, plugin, this);
+           suggestionValue = result.suggestionValue;
+           if (result.didModifySubpath) {
+               debugLog("suggest:mutated", { subpath: suggestionValue?.subpath });
+           }
+       } catch (e) {
+           console.error("[GFM Heading Links] Error in editorSuggest patch:", e);
+       }
+       return originalSelectSuggestion.call(this, suggestionValue, evt);
+   };
+   ```
+
+3. Add unit tests for `transformSuggestion()`:
+   + HTML stripping: `<b>Test</b>` → `Test`
+   + Slug resolution: `My Heading` → `#my-heading`
+   + Wikilink alias: `useMarkdownLinks=false` → `alias` set
+   + Affix application: `prefix="§"` → `#§my-heading`
+   + Combined: all mutations applied in correct order
+
+**Files to touch:** `src/patch-editor-suggest.ts`, `src/test/patch-editor-suggest.test.ts` (new).
+
+**Verification:** `npm test` passes with new `transformSuggestion` test cases. `npm run build` succeeds. Autocomplete behavior is identical to pre-refactoring. The `selectSuggestion` wrapper is ≤15 lines.
+
+### TASK-1011: Create Link Normalization Layer in `src/link-parse.ts` [DONE]
+
+**Depends on:** TASK-1005 (unified hover resolution), TASK-1002 (affix feature). **Parallel with:** TASK-1010, TASK-1013. **Objectives:** [OBJ-018](objectives.md#v13-code-quality-objectives--second-review-pass).
+
+Move `stripAffixes()` out of `resolve-target.ts` into a new `src/link-parse.ts` module. The resolution engine should receive clean slugs — it should not know about cosmetic autocomplete decorations. Currently `resolve-target.ts` imports `GfmSettings` to undo what `patch-editor-suggest.ts` did with those same settings, creating a bidirectional coupling anti-pattern.
+
+**Implementation:**
+
+1. Create `src/link-parse.ts`:
+
+   ```typescript
+   import type { GfmSettings } from "./settings";
+
+   /**
+    * Normalizes a raw link slug by stripping cosmetic affixes and URL-decoding.
+    * Callers (patch-link-click, patch-link-hover) should normalize slugs before
+    * passing them to the resolution pipeline.
+    */
+   export function normalizeSlug(rawSlug: string, settings?: GfmSettings): string {
+       let slug = rawSlug;
+
+       // URL decode
+       try { slug = decodeURIComponent(slug); } catch { /* keep raw */ }
+
+       // Strip user-configured prefix/suffix
+       const prefix = settings?.prefix || "";
+       const suffix = settings?.suffix || "";
+       if (prefix && slug.startsWith(prefix)) slug = slug.substring(prefix.length);
+       if (suffix && slug.endsWith(suffix)) slug = slug.substring(0, slug.length - suffix.length);
+
+       return slug;
+   }
+   ```
+
+2. In `patch-link-click.ts`: call `normalizeSlug(slug, plugin.settings)` before `resolveGfmTarget()`. Remove the duplicated URL-decode from the resolution pipeline call site.
+3. In `patch-link-hover.ts`: call `normalizeSlug(slug, plugin.settings)` before `resolveGfmTargetSync()`.
+4. In `resolve-target.ts`: **remove** the `stripAffixes()` function entirely. **Remove** the `import type { GfmSettings }` import. The resolution functions now receive pre-normalized slugs and can drop the affix-stripping fallback (`index.get(decodedSlug)` after `stripAffixes` fails).
+5. Update existing `resolve-target.test.ts` to reflect the API change (slug argument is now pre-normalized).
+
+**Files to touch:** `src/link-parse.ts` (new), `src/patch-link-click.ts`, `src/patch-link-hover.ts`, `src/resolve-target.ts`, `src/test/resolve-target.test.ts`.
+
+**Verification:** `npm test` passes. `npm run build` succeeds. `resolve-target.ts` has zero imports from `settings.ts`. Click a GFM link with affix characters — navigation resolves correctly. Hover over a GFM link with affix characters — Page Preview works.
+
+### TASK-1012: Eliminate Sync/Async Resolution Pipeline Duplication [DONE]
+
+**Depends on:** TASK-1005 (unified hover resolution). **Parallel with:** TASK-1010, TASK-1011. **Objectives:** [OBJ-019](objectives.md#v13-code-quality-objectives--second-review-pass).
+
+`resolveGfmTarget()` (async) and `resolveGfmTargetSync()` (sync) duplicate ~180 lines of identical guard logic, URL decoding, file resolution, and fallback handling. The only difference is Stage 4: async uses `IndexCache.get()` (which includes HTML anchors via `vault.read()`), sync uses `buildDocumentIndex()` directly on the metadata cache.
+
+**Implementation:**
+
+1. Extract shared Stages 1–3 and Stage 5 into private helper functions:
+
+   ```typescript
+   function guardGfmSlug(rawSlug: string): string | null {
+       if (!isGfmSlug(rawSlug)) return null;
+       try { return decodeURIComponent(rawSlug); } catch { return rawSlug; }
+   }
+
+   function resolveTargetFile(
+       plugin: GfmHeadingLinksPlugin,
+       notePath: string,
+       sourcePath: string
+   ): TFile | null {
+       if (notePath === "") {
+           const f = plugin.app.vault.getAbstractFileByPath(sourcePath);
+           return f instanceof TFile ? f : null;
+       }
+       return plugin.app.metadataCache.getFirstLinkpathDest(notePath, sourcePath);
+   }
+   ```
+
+2. Refactor `resolveGfmTarget()` to use the shared helpers and focus on the async Stage 4 (IndexCache → DocumentIndex with HTML anchors).
+3. Refactor `resolveGfmTargetSync()` to use the same shared helpers and focus on the sync Stage 4 (metadata cache → `buildDocumentIndex()` without HTML anchors).
+4. Both functions remain as the public API (same signatures), but their bodies shrink from ~90 lines each to ~30 lines each.
+
+**Files to touch:** `src/resolve-target.ts`.
+
+**Verification:** `npm test` passes all existing `resolve-target.test.ts` cases. `npm run build` succeeds. Click navigation and hover preview work identically to pre-refactoring. Line count of `resolve-target.ts` decreases by ~100 lines.
+
+### TASK-1013: Migrate Settings Tab to Declarative `getSettingDefinitions()` API [DONE]
+
+**Depends on:** TASK-1003 (existing settings tab). **Parallel with:** TASK-1010, TASK-1011. **Objectives:** [OBJ-020](objectives.md#v13-code-quality-objectives--second-review-pass).
+
+Replace the legacy imperative `display()` API in `GfmSettingsTab` with the declarative `getSettingDefinitions()` API available since Obsidian 1.13.0. The declarative API handles save/load wiring automatically and enforces Obsidian's settings UI style guide.
+
+**Current issues with the imperative approach:**
+
+- Manual `onChange` → `this.plugin.saveSettings()` wiring for each control.
+- Manual `containerEl.empty()` and DOM construction.
+- Violates style guide: `containerEl.createEl("h2", { text: "GFM Heading Links" })` — plugin-name headings are forbidden (the sidebar tab title already names the plugin).
+- Violates style guide: `addText()` uses `setPlaceholder("e.g. §")` — placeholder text should be sentence case.
+
+**Implementation:**
+
+1. Replace the `display()` method with `getSettingDefinitions()`:
+
+   ```typescript
+   getSettingDefinitions() {
+       return [
+           {
+               name: "Link prefix",
+               desc: "Character prepended to the GFM slug during autocomplete. Example: § produces [[Note#§my-heading]]. Leave empty for no prefix.",
+               control: {
+                   type: "text",
+                   key: "prefix",
+                   placeholder: "e.g. §",
+               },
+           },
+           {
+               name: "Link suffix",
+               desc: "Character appended to the GFM slug during autocomplete. Example: ¶ produces [[Note#my-heading¶]]. Leave empty for no suffix.",
+               control: {
+                   type: "text",
+                   key: "suffix",
+                   placeholder: "e.g. ¶",
+               },
+           },
+       ];
+   }
+   ```
+
+2. Remove the `display()` method, the `containerEl.createEl("h2")` heading, and the `containerEl.createEl("p")` description paragraph. The description text should move to `desc` on each control or be omitted (the plugin's README is the appropriate place for explanatory prose).
+3. Remove the manual `import { Setting }` if no longer needed.
+4. Verify `minAppVersion` in `manifest.json` is ≥1.13.0 (required for declarative API). If supporting older versions, implement the [dual-support pattern](https://docs.obsidian.md/Plugins/Guides/Migrate+to+declarative+settings#Path+B:+dual+support).
+
+**Files to touch:** `src/settings.ts`, `manifest.json` (verify `minAppVersion`).
+
+**Verification:** Open Obsidian Settings → GFM Heading Links tab. Verify prefix/suffix fields render and persist correctly. Verify no plugin-name heading appears at the top. `npm run build` succeeds. `npx tsc --noEmit` passes.
+
+---
+
+## Phase 11: v2 — HTML Anchor Support (Deferred)
+
+**Cycles:** Independent. Requires multi-layer architecture changes across click interception, reveal mechanism, and possibly CodeMirror-level event handling. Investigation plans preserved in `task-bugs.md`.
+
+### TASK-0802: Toggle Setting for HTML Anchors [DEFERRED — v2]
+
+The plugin can already parse `<a id="...">` HTML tags in the DocumentIndex. Expose a toggle in the settings tab (from TASK-1003) to enable/disable HTML anchor resolution. **Deferred to v2 — HTML anchor click/hover support must be solved first.**
+
+### TASK-0803: Investigate & Fix HTML Anchor Click in Source/Live Preview [DEFERRED — v2]
+
+**Depends on:** TASK-0401, TASK-0301. **Bug:** [Bug 5](task-bugs.md#5-html-anchor-click-only-works-in-reading-mode--deferred-to-v2).
+
+HTML anchor links only resolve in Reading mode. Investigation plan preserved in task-bugs.md. **Deferred to v2.**

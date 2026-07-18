@@ -3,7 +3,7 @@ title: "Objectives & Architecture Decisions"
 tags: [architecture, plan, objectives, decisions]
 description: "Why we're building the GFM Heading Links plugin this way — 8 objectives, v1 scope table, and 7 architecture decisions with rationale."
 date_created: 2026-07-08
-date_changed: 2026-07-10
+date_changed: 2026-07-17
 author: ["Lucas Galdino", "GitHub Copilot"]
 plan_version: "2.0"
 parent: "[[plan.md]]"
@@ -36,14 +36,40 @@ parent: "[[plan.md]]"
 | Auto-complete GFM output (EditorSuggest.selectSuggestion patch) | ✅ | Mutates `value.subpath` before native insertion; resolved alias loss + duplicate suffix bugs |
 | Embed sections (`![[Note#gfm-slug]]`) | Defer to v2 | Currently working with native headings; GFM embeds use resolveSubpath internally which is complex |
 | Link resolution coloring (dimmed links) | Defer to v2 | Cosmetic; currently working with native links |
-| HTML anchor click handling (DOM interception) | Defer to v2 | Target identification via raw-file scanning in v1; click ownership via DOM interception in v2 |
-| Wikilink-aware editor suggestions | Defer to v2 | Auto-inject `\|Original Heading` alias when wikilinks enabled. See [OBJ-009](#v2-objectives-deferred). |
-| User-customizable link prefix/suffix | Defer to v2 | Allow users to add characters (e.g., `¶`, `§`) to generated links. See [OBJ-010](#v2-objectives-deferred). |
+| HTML anchor click handling (DOM interception) | Defer to v2 | Target identification via raw-file scanning in v1; click ownership requires multi-layer architecture changes. |
+| Wikilink-aware editor suggestions | v1.3 | Auto-inject `\|Original Heading` alias when wikilinks enabled. See [OBJ-009](#v13-objectives--settings--wikilink-alias). |
+| User-customizable link prefix/suffix | v1.3 | Settings tab for prefix/suffix characters (e.g., `¶`, `§`) on generated links. See [OBJ-010](#v13-objectives--settings--wikilink-alias). |
+
+## v1.3 Objectives — Settings & Wikilink Alias
+
+> Previously deferred to v2, now prioritized for v1.3. Easier to implement and more user-visible than HTML anchor support.
+
+- **OBJ-009:** ~~Wikilink-aware editor suggestions.~~ **RESOLVED** — [TASK-1001](tasks.md#task-1001-wikilink-aware-editor-suggestions-done). After Obsidian inserts the link, the plugin appends `|Original Heading` via `editor.replaceRange` on the active editor. Controlled by `plugin.settings.enableWikilinkAlias` toggle. Output: `[[file#gfm-slug|Original Heading]]`.
+- **OBJ-010:** ~~User-customizable prefix/suffix for link generation.~~ **RESOLVED** — [TASK-1002](tasks.md#task-1002-user-customizable-link-affixes-done) + [TASK-1003](tasks.md#task-1003-plugin-settings-tab-done). Settings tab with prefix/suffix fields + wikilink alias toggle. Affixes applied to heading alias during autocomplete (not the slug), so no stripping is needed during resolution.
+
+## v1.3 Code Quality Objectives — Refactoring from Code Review
+
+> Discovered during comprehensive code review (2026-07-16). These address DRY violations, SOLID principle gaps, and architectural consistency issues. All block the v1.3 release.
+
+- **OBJ-011:** ~~Extract~~ `isGfmSlug()` as a single shared guard function in `gfm-slugify.ts`. **RESOLVED** — [TASK-1004](tasks.md#task-1004-extract-isgfmslug-shared-guard-function-done). Guard duplication eliminated; also fixed an inverted-condition bug discovered during extraction.
+- **OBJ-012:** ~~Unify the hover-link resolution path with the main resolution pipeline.~~ **RESOLVED** — [TASK-1005](tasks.md#task-1005-unify-hover-link-resolution-with-indexcache-done). `resolveGfmTargetSync()` added to `resolve-target.ts`, hover handler now calls it instead of inline resolution. `require("./document-index")` removed.
+- **OBJ-013:** ~~Extract shared virtual block injection into a single utility function.~~ **RESOLVED** — [TASK-1006](tasks.md#task-1006-extract-shared-virtual-block-injection-utility-done). `src/virtual-block.ts` created with `injectVirtualBlock()` and `VIRTUAL_BLOCK_CLEANUP_MS = 1500` constant.
+- **OBJ-014:** ~~Split `patch-workspace.ts` by Single Responsibility Principle.~~ **RESOLVED** — [TASK-1007](tasks.md#task-1007-split-patch-workspacets-by-responsibility-done). Replaced by `patch-link-click.ts` (click navigation) + `patch-link-hover.ts` (hover preview). `patch-workspace.ts` deleted.
+- **OBJ-015:** ~~Rename weak variable names for readability.~~ **RESOLVED** — [TASK-1008](tasks.md#task-1008-rename-weak-variable-names-done). `data` → `hoverEventPayload`, `value` → `suggestionValue`, `mutated` → `didModifySubpath`. `link-target.ts` renamed to `types.ts` with all 5 imports updated.
+- **OBJ-016:** ~~Replace O(n²) section boundary algorithm with O(n) stack-based traversal.~~ **RESOLVED** — [TASK-1009](tasks.md#task-1009-stack-based-on-section-boundary-algorithm-done). Replaced nested loop in `buildDocumentIndex` with 2-pass approach: stack-based O(n) boundary computation, then O(n) target construction. All 25 existing tests pass unchanged.
+
+## v1.3 Code Quality Objectives — Second Review Pass
+
+> Discovered during second-pass code review (2026-07-16). These address god-function anti-patterns, separation-of-concerns violations, code duplication, and API migration debt. All block the v1.3 release.
+
+- **OBJ-017:** ~~Extract `selectSuggestion` mutation pipeline.~~ **RESOLVED** — [TASK-1010](tasks.md#task-1010-extract-selectsuggestion-mutation-pipeline-done). Extracted `transformSuggestion()` pure 4-step pipeline (HTML strip → slug resolve → wikilink alias → affix apply). Each step is independently testable.
+- **OBJ-018:** ~~Move link normalization to `src/link-parse.ts`.~~ **RESOLVED** — [TASK-1011](tasks.md#task-1011-create-link-normalization-layer-in-srclink-parsets-done). Created `normalizeSlug()` in `src/link-parse.ts`. Affixes are now on the alias (not slug), so no stripping is needed during resolution. `stripAffixes()` removed from the resolution pipeline.
+- **OBJ-019:** ~~Eliminate sync/async resolution duplication.~~ **RESOLVED** — [TASK-1012](tasks.md#task-1012-eliminate-syncasync-resolution-pipeline-duplication-done). Extracted `decodeGfmSlug()` and `resolveTargetFile()` shared helpers. Both `resolveGfmTarget()` and `resolveGfmTargetSync()` reduced from ~90 to ~15 lines each.
+- **OBJ-020:** ~~Migrate settings to declarative API.~~ **RESOLVED** — [TASK-1013](tasks.md#task-1013-migrate-settings-tab-to-declarative-getsettingdefinitions-api-done). Dual support: `getSettingDefinitions()` (Obsidian 1.13.0+) + `display()` fallback (< 1.13.0). `minAppVersion` set to `1.12.7`.
 
 ## v2 Objectives (Deferred)
 
-- **OBJ-009:** Wikilink-aware editor suggestions. When the user's Obsidian settings have "Use Markdown links" disabled (wikilinks enabled), autocomplete should output `[[file#gfm-slug|Original Heading]]` instead of just `[[file#gfm-slug]]`. Currently the alias is only preserved for markdown link format, not wikilinks. → See [TASK-1001](tasks.md#task-1001-wikilink-aware-editor-suggestions-todo).
-- **OBJ-010:** User-customizable prefix/suffix for link generation. Expose a settings tab allowing users to prepend/append characters to generated GFM links (e.g., `¶` pilcrow, `§` section sign). This would modify the `value.subpath` mutation in `applyEditorSuggestPatches` to include the user's chosen affixes. → See [TASK-1002](tasks.md#task-1002-user-customizable-link-affixes-todo).
+- **HTML Anchor Support:** Click navigation in all modes, hover preview for HTML anchors. Currently only works in Reading mode. See Bugs [1](task-bugs.md#1-html-anchor-hover-inconsistency--deferred-to-v2) and [5](task-bugs.md#5-html-anchor-click-only-works-in-reading-mode--deferred-to-v2), and tasks [TASK-0802](tasks.md#task-0802-toggle-setting-for-html-anchors-deferred--v2), [TASK-0803](tasks.md#task-0803-investigate--fix-html-anchor-click-in-sourcelive-preview-deferred--v2).
 
 ## Architecture decisions
 

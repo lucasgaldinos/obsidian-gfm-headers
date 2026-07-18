@@ -37,7 +37,7 @@
  */
 
 import { Plugin, TFile } from "obsidian";
-import type { DocumentIndex } from "./link-target";
+import type { DocumentIndex } from "./types";
 import { buildDocumentIndex, scanHtmlAnchors } from "./document-index";
 
 /**

@@ -121,40 +121,98 @@
  */
 export function gfmSlugify(text: string): string {
   return text
-    // Step 1: Normalize to lowercase.
-    // JavaScript's toLowerCase() is locale-aware and handles most scripts correctly.
     .toLowerCase()
-
-    // Step 2: Remove all characters that are NOT:
-    // - Unicode letters (\p{L})
-    // - Unicode numbers (\p{N})
-    // - Whitespace (\s) — kept temporarily, will be replaced in step 4
-    // - Hyphens (\-) — kept, GFM preserves existing hyphens in headings
-    // - Underscores (_) — kept, GFM preserves underscores
-    // The 'u' flag enables Unicode property escapes (\p{...}).
-    // The 'g' flag makes it replace ALL matches, not just the first.
     .replace(/[^\p{L}\p{N}\s\-_]/gu, "")
-
-    // Step 3: Remove leading and trailing whitespace.
-    // This prevents hyphens from appearing at the start or end of the slug.
-    // Must happen BEFORE whitespace→hyphen conversion to avoid boundary hyphens.
     .trim()
-
-    // Step 4: Replace any sequence of one or more whitespace characters
-    // (spaces, tabs, newlines — though newlines shouldn't appear in headings)
-    // with a single hyphen.
     .replace(/\s+/g, "-")
-
-    // Step 5: Collapse runs of consecutive hyphens into a single hyphen.
-    // This handles cases where:
-    // - The original text had multiple hyphens ("a --- b")
-    // - Step 2 removed a character between two hyphens or spaces
-    // - Spaces around hyphens created double hyphens in step 4
     .replace(/-+/g, "-")
-
-    // Step 6: Remove any hyphens at the very start or very end of the string.
-    // These would come from punctuation-only prefixes/suffixes that were
-    // stripped in step 2 and converted to hyphens in steps 4-5.
-    // Example: "-hello-" → "hello", "---hello-world---" → "hello-world"
     .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Allocates a unique slug by appending GFM collision suffixes (-1, -2, ...)
+ * until a slug not present in `usedSlugs` is found.
+ *
+ * This is the single source of truth for collision resolution, used by both
+ * `buildDocumentIndex` (click navigation) and `resolveGfmSlug` (autocomplete).
+ * Keeping it in one place ensures both systems produce identical slugs and
+ * prevents the cross-baseSlug collision bug from recurring.
+ *
+ * ## Cross-baseSlug collision handling
+ *
+ * Unlike a per-baseSlug counter (which is blind to slugs claimed by different
+ * heading texts), this function checks the actual set of used slugs. This means:
+ *
+ * - Literal `## Commands-1` claims `commands-1`.
+ * - Duplicate `## Commands` checks `commands-1` → already used → skips to `commands-2`.
+ *
+ * @param baseSlug - The base GFM slug (from `gfmSlugify()`), e.g., `"commands"`.
+ * @param usedSlugs - Any object with a `has()` method for membership checks
+ *                    (e.g., `Set<string>`, `Map<string, unknown>`, or a plain
+ *                    `{ has(key: string): boolean }` adapter). The function
+ *                    only reads — it never mutates the collection.
+ * @returns The first available slug: `baseSlug` if unused, or `baseSlug-N`
+ *          where N is the smallest positive integer that avoids collision.
+ *
+ * @example
+ * ```ts
+ * const used = new Set<string>();
+ * allocateUniqueSlug("intro", used);        // → "intro"
+ * allocateUniqueSlug("intro", used);        // → "intro-1"
+ * allocateUniqueSlug("intro", used);        // → "intro-2"
+ * allocateUniqueSlug("intro-1", used);      // → "intro-1-1" (cross-baseSlug!)
+ * ```
+ */
+export function allocateUniqueSlug(
+  baseSlug: string,
+  usedSlugs: { has(key: string): boolean },
+): string {
+  let finalSlug = baseSlug;
+  let suffix = 0;
+  while (usedSlugs.has(finalSlug)) {
+    suffix++;
+    finalSlug = `${baseSlug}-${suffix}`;
+  }
+  return finalSlug;
+}
+
+/**
+ * Determines whether a link slug fragment matches GFM heading slug conventions.
+ *
+ * GFM slugs are always lowercase, never URL-encoded, and never start with
+ * block-reference (`^`) or footnote (`[^`) prefixes. This predicate is the
+ * single source of truth for the GFM-vs-OFM detection heuristic, used by both
+ * `resolveGfmTarget()` (click navigation) and the hover-link interceptor.
+ *
+ * ## Why this is a shared function
+ *
+ * Previously this logic was duplicated verbatim in `resolve-target.ts` and
+ * `patch-workspace.ts`. Extracting it into a single predicate ensures both
+ * consumers stay in sync and satisfies the Open/Closed Principle — new guard
+ * conditions only need to be added in one place.
+ *
+ * @param slug - The raw slug fragment from a link (everything after `#`).
+ * @returns `true` if the slug matches GFM conventions (lowercase, no URL
+ *          encoding, not a block ref or footnote). `false` if it looks like
+ *          Obsidian's native format (uppercase, spaces, URL-encoded) or is
+ *          a block/footnote reference that Obsidian should handle natively.
+ *
+ * @example
+ * ```ts
+ * isGfmSlug("my-heading")      // → true  (lowercase, hyphenated)
+ * isGfmSlug("My Heading")      // → false (uppercase = Obsidian format)
+ * isGfmSlug("my%20heading")    // → false (URL-encoded = Obsidian format)
+ * isGfmSlug("^block-id")       // → false (block reference)
+ * isGfmSlug("[^footnote]")     // → false (footnote reference)
+ * isGfmSlug("")                // → false (empty slug)
+ * ```
+ */
+export function isGfmSlug(slug: string): boolean {
+  return (
+    slug.length > 0 &&
+    !/[A-Z]/.test(slug) &&
+    !/%[0-9A-Fa-f]{2}/.test(slug) &&
+    !slug.startsWith("^") &&
+    !slug.startsWith("[^")
+  );
 }
