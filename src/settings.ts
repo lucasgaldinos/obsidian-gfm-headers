@@ -95,9 +95,9 @@ export class GfmSettingsTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("Link prefix")
-            .setDesc("Character prepended to the GFM slug during autocomplete. Example: § produces [[Note#§my-heading]]. Leave empty for no prefix.")
+            .setDesc("Character prepended to the gfm slug during autocomplete. Example: § produces [[note#§my-heading]]. Leave empty for no prefix.")
             .addText(text => text
-                .setPlaceholder("e.g. §")
+                .setPlaceholder("E.g. §")
                 .setValue(this.plugin.settings.prefix)
                 .onChange(async (value) => {
                     this.plugin.settings.prefix = value;
@@ -106,9 +106,9 @@ export class GfmSettingsTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("Link suffix")
-            .setDesc("Character appended to the GFM slug during autocomplete. Example: ¶ produces [[Note#my-heading¶]]. Leave empty for no suffix.")
+            .setDesc("Character appended to the gfm slug during autocomplete. Example: ¶ produces [[note#my-heading¶]]. Leave empty for no suffix.")
             .addText(text => text
-                .setPlaceholder("e.g. ¶")
+                .setPlaceholder("E.g. ¶")
                 .setValue(this.plugin.settings.suffix)
                 .onChange(async (value) => {
                     this.plugin.settings.suffix = value;
@@ -117,7 +117,7 @@ export class GfmSettingsTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("Enable wikilink alias")
-            .setDesc("When using wikilinks ([[), automatically append |Original Heading after the GFM slug. Disable if you prefer bare [[#slug]] without alias.")
+            .setDesc("When using wikilinks ([[), automatically append |original heading after the gfm slug. Disable if you prefer bare [[#slug]] without alias.")
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.enableWikilinkAlias)
                 .onChange(async (value) => {

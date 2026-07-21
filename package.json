@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint main.ts 'src/*.ts'"
   },
   "keywords": [],
   "author": "Lucas Galdino",
@@ -14,6 +15,9 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "esbuild": "^0.24.0",
+    "eslint": "^10.7.0",
+    "eslint-plugin-obsidianmd": "^0.4.1",
+    "globals": "^17.7.0",
     "obsidian": "latest",
     "typescript": "^5.4.0",
     "vitest": "^4.1.10"

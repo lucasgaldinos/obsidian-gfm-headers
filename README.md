@@ -1,20 +1,32 @@
 # GFM Heading Links
 
+[![Version](https://img.shields.io/badge/version-1.3.7-blue)](https://github.com/lucasgaldinos/obsidian-gfm-headers/releases)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Obsidian](https://img.shields.io/badge/Obsidian-%E2%89%A5%201.0.0-8b5cf6)](https://obsidian.md)
+
 Resolve GFM-style kebab-case heading links at runtime inside Obsidian — no export hacks, no file modification.
 
 ## What it does
 
-By default, Obsidian doesn't understand GFM (GitHub Flavored Markdown) heading slugs like `#red-hat-based-distributions-centos-fedora`. This plugin resolves them at runtime so that both clicks and Ctrl+hover previews navigate to the correct heading.
+Obsidian uses its **own** heading slug format (case-sensitive, spaces preserved): a heading `## My Heading: Part 1` produces `#My Heading: Part 1`. GitHub Flavored Markdown (GFM) uses a different standard: the same heading becomes `#my-heading-part-1`.
 
-**Example:** A link `[test](#red-hat-based-distributions-centos-fedora)` will resolve to the heading `## Red Hat-Based Distributions (CentOS, Fedora)`.
+This plugin bridges that gap. Links written in GFM format resolve correctly at runtime:
+
+| Without plugin | With plugin |
+| --- | --- |
+| `[test](#red-hat-based-distributions-centos-fedora)` → ❌ dead link | → ✅ navigates to `## Red Hat-Based Distributions (CentOS, Fedora)` |
+| `[[Note#my-heading]]` → ❌ unresolved | → ✅ resolves to the correct heading in `Note.md` |
+| Autocomplete inserts `#My Heading` | → inserts `#my-heading` with `\|My Heading` alias |
+
+Both **clicks** and **Ctrl+hover previews** work. Cross-file links resolve seamlessly. The autocomplete dropdown automatically produces GFM slugs when you type `[[#`.
 
 ## How it works
 
-Instead of relying on fragile DOM mutation observers or CodeMirror 6 `ViewPlugin` extensions that aggressively swallow `mouseover` events (which breaks native behaviors like Ctrl+Hover), this plugin intercepts links at the **core routing layer** of Obsidian.
+Instead of DOM mutation observers or CodeMirror 6 `ViewPlugin` extensions (which break native behaviors like Ctrl+Hover), this plugin intercepts links at Obsidian's **core routing layer**:
 
-- **Click Navigation (`openLinkText`)**: The plugin monkeypatches `app.workspace.openLinkText`. Any time a link is clicked anywhere in the app (Live Preview, Source Mode, or Reading View), we intercept the link payload and look up the slug in our lightweight background `DocumentIndex`. We then temporarily inject a virtual block (`#^gfm-click-<slug>`) into Obsidian's cache. This forces Obsidian's native routing to smoothly scroll and highlight the correct heading—even for duplicate slugs!
-- **Page Preview (`hover-link`)**: The plugin monkeypatches `app.workspace.trigger`. When the native Markdown view detects a hover and fires the `"hover-link"` event, we mutate the event's `linktext` property mid-air before it reaches the Page Preview plugin.
-- **Autocomplete (`EditorSuggest.selectSuggestion`)**: When you type `[[#` and select a heading from the dropdown, the inserted link automatically uses the GFM slug format (`[My Heading](file.md#my-heading)`) instead of Obsidian's native format. The original heading text is preserved as the alias.
+- **Click Navigation (`openLinkText`)**: Monkeypatches `app.workspace.openLinkText`. When any link is clicked (Live Preview, Source Mode, or Reading View), the slug is looked up in a lightweight `DocumentIndex`. A temporary virtual block (`#^gfm-click-<slug>`) is injected into Obsidian's metadata cache, triggering native scroll + highlight — even for duplicate headings.
+- **Page Preview (`hover-link`)**: Monkeypatches `app.workspace.trigger`. When Obsidian fires the `"hover-link"` event, the `linktext` property is mutated mid-air before the Page Preview plugin processes it.
+- **Autocomplete (`EditorSuggest.selectSuggestion`)**: When you select a heading from the `[[#` dropdown, the inserted link uses the GFM slug format. The original heading text is preserved as the display alias (e.g., `[[#my-heading\|My Heading]]`).
 
 ```mermaid
 flowchart LR
@@ -45,39 +57,64 @@ Because the routing layer is patched, **100% of native behavior is preserved**:
 - Cross-file links (`[Link](file-2.md#slug)`) resolve seamlessly.
 - Other plugins relying on standard workspace link navigation remain unaffected.
 
-## Architectural References
+## Settings
 
-To achieve this, the plugin leverages undocumented patterns from the Obsidian architecture, derived from community plugin documentation:
+The plugin adds a settings tab under **Settings → GFM Heading Links**:
 
-- [Workspace.openLinkText](https://docs.obsidian.md/Reference/TypeScript+API/Workspace/openLinkText): The primary mechanism for programmatic navigation in Obsidian.
-- **The `"hover-link"` payload**: Discovered via internal community guides (e.g., [Build a Bases view](https://docs.obsidian.md/Plugins/Guides/Build+a+Bases+view)), the `workspace.trigger('hover-link', ...)` event expects an object containing `{ event, source, hoverParent, targetEl, linktext }`. Mutating `linktext` inside this payload allows us to trick the Page Preview plugin into finding the correct heading.
+| Setting | Default | Description |
+| --- | --- | --- |
+| **Link prefix** | `""` (empty) | Character prepended to the GFM slug in autocomplete output. Example: `§` → `[[Note#§my-heading]]`. |
+| **Link suffix** | `""` (empty) | Character appended to the GFM slug in autocomplete output. Example: `¶` → `[[Note#my-heading¶]]`. |
+| **Enable wikilink alias** | `true` | When using wikilinks (`[[`), automatically appends `\|Original Heading` after the GFM slug. Disable for bare `[[#slug]]`. |
+
+Affixes are **cosmetic only** — they are stripped during link resolution so navigation still works regardless of what prefix/suffix you configure.
 
 ## Compatibility
 
-- Requires Obsidian ≥ 1.12.7
-- Works on desktop and mobile (no Node/Electron APIs)
+- Requires **Obsidian ≥ 1.0.0**
+- Works on **desktop and mobile** (no Node.js or Electron APIs)
 - Compatible with Better Markdown Links
+
+## Documentation
+
+- **[Architecture](docs/architecture.md)** — System class diagram, interaction flowcharts, lifecycle sequences, virtual block injection pattern, and design decisions.
+- **[GFM Spec & Comparisons](docs/research/gfm-spec-and-comparisons.md)** — How GitHub's heading slug algorithm differs from Obsidian's, with test cases.
+- **[Architectural History](docs/research/architectural-history.md)** — Why the plugin abandoned CM6 ViewPlugins and DOM MutationObservers in favor of workspace-level monkeypatching.
+- **[Changelog](CHANGELOG.md)** — Release history and notable changes.
 
 ## Development
 
 ```bash
-npm install
-npm run dev     # watch mode for development
-npm run build   # production build (tsc + esbuild)
-npm test        # run 48 unit tests (vitest)
+npm install       # install dependencies
+npm run dev       # watch mode for development (DEBUG_ENABLED=true)
+npm run build     # production build: tsc type-check + esbuild bundle
+npm test          # run unit tests (vitest)
+npm run lint      # run ESLint with eslint-plugin-obsidianmd
 ```
+
+### Pre-submission validation
+
+Before submitting to the [Obsidian Community Directory](https://community.obsidian.md), run `npm run lint` to catch issues that would fail the automated source code review:
+
+- **Semver validation** — `minAppVersion` must use three-segment semver (`x.y.z`, not `x.y`).
+- **Sentence case** — UI text must follow [Obsidian's style guide](https://help.obsidian.md/Contributing+to+Obsidian/Style+guide).
+- **API compatibility** — only APIs available in declared `minAppVersion` are allowed.
+
+Powered by [eslint-plugin-obsidianmd](https://www.npmjs.com/package/eslint-plugin-obsidianmd).
 
 ### Branches
 
-- `main` — production (DEBUG_ENABLED=false). Tag releases here.
-- `dev` — development (DEBUG_ENABLED=true). Feature branches from here.
+- `main` — production (`DEBUG_ENABLED=false`). Tag releases here.
+- `dev` — development (`DEBUG_ENABLED=true`). Feature branches from here.
 
 ## Known Limitations
 
-- **HTML anchor links** (`<a id="...">`) only resolve on click in Reading mode. Live Preview and Source mode support is under investigation.
-- **HTML anchor hover preview** is not yet supported.
-- **GFM collision suffix ambiguity**: when a heading's literal text matches another heading's collision suffix (e.g., `## Commands-1` coexisting with duplicate `## Commands`), the last heading in document order wins. A first-occurrence priority fix is planned for v2.
+- **HTML anchor hover preview**: `<a id="...">` and `<a name="...">` targets resolve correctly on **click** (all view modes — the async resolver reads file content via `vault.read()`), but hover preview does not yet support HTML anchors. The hover interceptor uses the synchronous `resolveGfmTargetSync()` path which only consults the in-memory metadata cache (no disk I/O for HTML anchor scanning).
 
 ## License
 
-MIT
+[License](./LICENSE)
+
+## Author
+
+[Lucas Galdino](https://github.com/lucasgaldinos)
