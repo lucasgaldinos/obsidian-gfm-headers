@@ -23,5 +23,13 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# Plugin runtime data (user-specific)
+data.json
+
+# Screenshots / binary artifacts
+*.png
+
+# Agent instructions (keep tracked via force-add)
 .github/
+!.github/workflows/
 .agents/

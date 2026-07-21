@@ -366,3 +366,23 @@ Architectural and code quality issues discovered during a comprehensive source c
 - **Impact**: For typical files (<100 headings), the O(n²) behavior is negligible. But the stack-based approach is actually simpler code (no inner loop, no `break`), so this is a code clarity improvement as much as a performance one.
 - **Verification**: Existing `document-index.test.ts` endLine tests must pass unchanged. Add a test with 50+ nested headings to verify O(n) behavior.
 - **Resolution**: Replaced nested loop with 2-pass approach: Pass 1 uses a stack to compute all `endLine`/`endOffset` values in O(n), Pass 2 builds `HeadingAnchorTarget` entries. All 25 existing tests pass unchanged. Code is both faster and simpler (no inner loop, no `break`).
+
+## Session 4: Community Review Linter (2026-07-20)
+
+### 1. `this: void` — methods detached from object — resolved
+
+> **Task:** [TASK-1302](tasks.md#task-1302-fix-this-void-linter-warnings-done). **Phase:** [Phase 13](tasks.md#phase-13-community-review-compliance).
+
+- **Observed Warning**: Obsidian's automated review linter reported `this: void` warnings at `src/patch-link-click.ts:46` and `src/patch-link-hover.ts:64`. The warning: "A method that is not declared with `this: void` may cause unintentional scoping of `this` when separated from its object."
+- **Root Cause**: `const originalOpenLinkText = workspace.openLinkText` captures the method reference detached from the `workspace` object. When later called via `.call(workspace, ...)`, the `this` rebinding is explicit but the linter flags the capture itself as a potential `this`-scoping hazard.
+- **Fix**: Bind at capture time: `const originalOpenLinkText = workspace.openLinkText.bind(workspace)`. Then replace all `.call(workspace, ...)` invocations with direct calls — the binding makes `.call()` redundant.
+- **Files changed**: `src/patch-link-click.ts` (lines 46, 74, 81, 106), `src/patch-link-hover.ts` (lines 64, 83, 124).
+- **Resolution**: Both files now use `.bind(workspace)` at method capture and direct invocation. Obsidian linter passes — no `this: void` warnings.
+
+### 2. `console.log` in production builds — resolved
+
+> **Task:** [TASK-1303](tasks.md#task-1303-production-console-hygiene-done).
+
+- **Observed Warning**: `console.log` statements flagged even within a gated debug system (`DEBUG_ENABLED` check). Obsidian's linter does not perform data-flow analysis — it flags any `console.log` regardless of runtime guards.
+- **Fix**: Changed `console.log` → `console.debug` in `src/debug.ts`. `console.debug` is semantically correct (debug-level messages) and is suppressed by default in Chrome DevTools at the default "Info" log level.
+- **Resolution**: `grep -r 'console\\.log' src/` returns zero results. Linter passes.

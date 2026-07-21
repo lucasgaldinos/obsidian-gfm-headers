@@ -117,8 +117,8 @@ export function buildDocumentIndex(cache: CachedMetadata): DocumentIndex {
     // Stack holds indices of headings whose sections haven't been "closed"
     // yet by a subsequent heading of equal or higher level.
     // Replaces the previous O(n²) nested loop (TASK-1009).
-    const endLines: number[] = new Array(headings.length);
-    const endOffsets: (number | undefined)[] = new Array(headings.length);
+    const endLines: number[] = new Array<number>(headings.length).fill(0);
+    const endOffsets: (number | undefined)[] = new Array<number | undefined>(headings.length);
     const stack: number[] = [];
 
     for (let i = 0; i < headings.length; i++) {

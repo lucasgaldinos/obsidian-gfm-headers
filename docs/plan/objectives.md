@@ -3,7 +3,7 @@ title: "Objectives & Architecture Decisions"
 tags: [architecture, plan, objectives, decisions]
 description: "Why we're building the GFM Heading Links plugin this way — 8 objectives, v1 scope table, and 7 architecture decisions with rationale."
 date_created: 2026-07-08
-date_changed: 2026-07-17
+date_changed: 2026-07-20
 author: ["Lucas Galdino", "GitHub Copilot"]
 plan_version: "2.0"
 parent: "[[plan.md]]"
@@ -66,6 +66,12 @@ parent: "[[plan.md]]"
 - **OBJ-018:** ~~Move link normalization to `src/link-parse.ts`.~~ **RESOLVED** — [TASK-1011](tasks.md#task-1011-create-link-normalization-layer-in-srclink-parsets-done). Created `normalizeSlug()` in `src/link-parse.ts`. Affixes are now on the alias (not slug), so no stripping is needed during resolution. `stripAffixes()` removed from the resolution pipeline.
 - **OBJ-019:** ~~Eliminate sync/async resolution duplication.~~ **RESOLVED** — [TASK-1012](tasks.md#task-1012-eliminate-syncasync-resolution-pipeline-duplication-done). Extracted `decodeGfmSlug()` and `resolveTargetFile()` shared helpers. Both `resolveGfmTarget()` and `resolveGfmTargetSync()` reduced from ~90 to ~15 lines each.
 - **OBJ-020:** ~~Migrate settings to declarative API.~~ **RESOLVED** — [TASK-1013](tasks.md#task-1013-migrate-settings-tab-to-declarative-getsettingdefinitions-api-done). Dual support: `getSettingDefinitions()` (Obsidian 1.13.0+) + `display()` fallback (< 1.13.0). `minAppVersion` set to `1.12.7`.
+
+## v1.3 Release Infrastructure Objectives
+
+> Completed 2026-07-18. Branch strategy, CI/CD, and licensing for community directory submission.
+
+- **OBJ-021:** ~~Prepare plugin for Obsidian Community Directory submission.~~ **RESOLVED** — [Phase 12](tasks.md#phase-12-release-preparation). LICENSE (MIT), GitHub Actions release workflow (`.github/workflows/release.yml`), manifest author fields, `.gitignore` hardening, branch strategy (main=production/DEBUG_ENABLED=false, dev=development/DEBUG_ENABLED=true). See [TASK-1201–1206](tasks.md#phase-12-release-preparation).
 
 ## v2 Objectives (Deferred)
 

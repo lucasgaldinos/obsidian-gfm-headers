@@ -21,10 +21,10 @@ flowchart LR
     subgraph Click Flow
         click[User Clicks GFM Link] --> patch_open[openLinkText Interceptor]
         patch_open --> lookup[Lookup slug in DocumentIndex]
-        
+
         lookup -->|Found| inject[Inject ephemeral Virtual Block<br/>#^gfm-click-slug]
         lookup -->|Not Found| pass_click[Pass to Native Obsidian]
-        
+
         inject --> modify_click[Rewrite link to block subpath]
         modify_click --> pass_click
         pass_click --> native_scroll[Native Scroll & Highlight]
@@ -54,7 +54,7 @@ To achieve this, the plugin leverages undocumented patterns from the Obsidian ar
 
 ## Compatibility
 
-- Requires Obsidian ≥ 0.14.8
+- Requires Obsidian ≥ 1.12.7
 - Works on desktop and mobile (no Node/Electron APIs)
 - Compatible with Better Markdown Links
 
@@ -64,8 +64,13 @@ To achieve this, the plugin leverages undocumented patterns from the Obsidian ar
 npm install
 npm run dev     # watch mode for development
 npm run build   # production build (tsc + esbuild)
-npm test        # run 17 unit tests (vitest)
+npm test        # run 48 unit tests (vitest)
 ```
+
+### Branches
+
+- `main` — production (DEBUG_ENABLED=false). Tag releases here.
+- `dev` — development (DEBUG_ENABLED=true). Feature branches from here.
 
 ## Known Limitations
 

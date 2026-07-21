@@ -3,18 +3,20 @@ title: "GFM heading links architecture plan"
 tags: [architecture, implementation-plan, obsidian-plugin, gfm-heading-links, solid]
 description: "Unified architecture for deterministic GFM heading navigation, autocomplete, and Page Preview in Obsidian."
 date_created: 2026-07-08
-date_changed: 2026-07-16
+date_changed: 2026-07-20
 author: ["Lucas Galdino", "GitHub Copilot"]
 goal: "Implement a unified, deterministic architecture for GFM-style heading and anchor navigation in Obsidian"
 version: "2.0"
-status: "v1.3.0 ready for release — all 13 Phase 10 tasks complete, 25 tests passing"
+status: "v1.3.1 released — community review compliance complete. main (DEBUG_ENABLED=false, production), dev (DEBUG_ENABLED=true, development)."
 ---
 
-> [!tip] Plan status: v1.3.0 ready. All 13 Phase 10 tasks (TASK-1001–1013) complete. 25 tests passing, build clean.
+> [!tip] Plan status: v1.3.1 released. Community review compliance complete. 48 tests passing, build clean.
 >
-> v1.3 features: settings tab, wikilink alias auto-injection, link affixes, 9 refactoring improvements (shared guard, unified resolution, shared VBI, SRP split, variable renames, O(n) algorithm, pure pipeline, link normalization, de-duplicated resolution). HTML anchor support deferred to v2.
+> **Branch strategy:** `main` (production, DEBUG_ENABLED=false) • `dev` (development, DEBUG_ENABLED=true). Release workflow auto-builds on tag push via GitHub Actions with artifact attestations.
 >
-> See [tasks.md](./tasks.md#phase-10-v13--code-quality-refactoring--settings--wikilink-alias) for the current implementation status.
+> v1.3.1 features: release infrastructure (LICENSE, CI/CD, branch strategy), community directory review compliance (eliminated all `any` types, `this: void` linter warnings, `console.log` in production), artifact attestations for supply-chain provenance.
+>
+> See [tasks.md](./tasks.md#phase-13-community-review-compliance) for review compliance tasks.
 
 # GFM heading links architecture plan
 

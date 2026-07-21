@@ -39,11 +39,17 @@
  * ```
  */
 
-import { TFile } from "obsidian";
 import { resolveGfmTargetSync, type GfmHeadingLinksPlugin } from "./resolve-target";
 import { debugLog } from "./debug";
 import { isGfmSlug } from "./gfm-slugify";
 import { injectVirtualBlock } from "./virtual-block";
+
+/** Shape of the event payload emitted by Obsidian's hover-link trigger. */
+interface HoverEventPayload {
+    linktext?: string;
+    sourcePath?: string;
+    hoverParent?: { file?: { path?: string } };
+}
 
 /**
  * Applies the `trigger('hover-link')` monkeypatch for GFM heading link
@@ -55,13 +61,13 @@ import { injectVirtualBlock } from "./virtual-block";
  */
 export function applyHoverPatch(plugin: GfmHeadingLinksPlugin): () => void {
     const workspace = plugin.app.workspace;
-    const originalTrigger = workspace.trigger;
+    const originalTrigger = workspace.trigger.bind(workspace);
 
-    workspace.trigger = function (name: string, ...args: any[]) {
+    workspace.trigger = (name: string, ...args: unknown[]) => {
         if (name === "hover-link" && args.length > 0) {
             debugLog("patch:hover-link:intercepted", { argCount: args.length });
             try {
-                const hoverEventPayload = args[0];
+                const hoverEventPayload = args[0] as HoverEventPayload | undefined;
                 if (hoverEventPayload && typeof hoverEventPayload.linktext === "string") {
                     const linktext: string = hoverEventPayload.linktext;
                     const hashIdx = linktext.indexOf("#");
@@ -74,7 +80,7 @@ export function applyHoverPatch(plugin: GfmHeadingLinksPlugin): () => void {
                         debugLog("patch:hover-link:slug", { slug });
 
                         if (!isGfmSlug(slug)) {
-                            return originalTrigger.call(this, name, ...args);
+                            return originalTrigger(name, ...args);
                         }
 
                         debugLog("patch:hover-link:guard", { isGfmSlug: true });
@@ -115,7 +121,7 @@ export function applyHoverPatch(plugin: GfmHeadingLinksPlugin): () => void {
                 console.error("[GFM Heading Links] Error in hover-link patch:", err);
             }
         }
-        return originalTrigger.call(this, name, ...args);
+        return originalTrigger(name, ...args);
     };
 
     return () => {

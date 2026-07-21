@@ -1,9 +1,9 @@
 ---
 title: "Tasks: Implementation Plan"
 tags: [architecture, plan, tasks, implementation]
-description: "7 phases, 24 tasks with dependency graphs, parallel execution opportunities, and console-based verification steps using debugLog traces."
+description: "8 phases, 30+ tasks with dependency graphs, parallel execution opportunities, and console-based verification steps using debugLog traces."
 date_created: 2026-07-08
-date_changed: 2026-07-16
+date_changed: 2026-07-20
 author: ["Lucas Galdino", "GitHub Copilot"]
 plan_version: "2.0"
 parent: "[[plan.md]]"
@@ -79,6 +79,18 @@ Each phase lists its tasks, dependencies, parallel opportunities, files to touch
   + [Phase 11: v2 — HTML Anchor Support (Deferred)](#phase-11-v2--html-anchor-support-deferred)
     - [TASK-0802: Toggle Setting for HTML Anchors \[DEFERRED — v2\]](#task-0802-toggle-setting-for-html-anchors-deferred--v2-1)
     - [TASK-0803: Investigate \& Fix HTML Anchor Click in Source/Live Preview \[DEFERRED — v2\]](#task-0803-investigate--fix-html-anchor-click-in-sourcelive-preview-deferred--v2-1)
+  + [Phase 12: Release Preparation — Community Directory Submission](#phase-12-release-preparation--community-directory-submission)
+    - [TASK-1201: Create LICENSE file \[DONE\]](#task-1201-create-license-file-done)
+    - [TASK-1202: Fix manifest.json author fields \[DONE\]](#task-1202-fix-manifestjson-author-fields-done)
+    - [TASK-1203: Create GitHub Actions release workflow \[DONE\]](#task-1203-create-github-actions-release-workflow-done)
+    - [TASK-1204: Update .gitignore \[DONE\]](#task-1204-update-gitignore-done)
+    - [TASK-1205: Align package.json version with manifest \[DONE\]](#task-1205-align-packagejson-version-with-manifest-done)
+    - [TASK-1206: Branch strategy — DEBUG_ENABLED per branch \[DONE\]](#task-1206-branch-strategy--debug_enabled-per-branch-done)
+  + [Phase 13: Community Review Compliance](#phase-13-community-review-compliance)
+    - [TASK-1301: Eliminate `any` types \[DONE\]](#task-1301-eliminate-any-types-done)
+    - [TASK-1302: Fix `this: void` linter warnings \[DONE\]](#task-1302-fix-this-void-linter-warnings-done)
+    - [TASK-1303: Production console hygiene \[DONE\]](#task-1303-production-console-hygiene-done)
+    - [TASK-1304: CI artifact attestations \[DONE\]](#task-1304-ci-artifact-attestations-done)
 
 ---
 
@@ -996,3 +1008,177 @@ The plugin can already parse `<a id="...">` HTML tags in the DocumentIndex. Expo
 **Depends on:** TASK-0401, TASK-0301. **Bug:** [Bug 5](task-bugs.md#5-html-anchor-click-only-works-in-reading-mode--deferred-to-v2).
 
 HTML anchor links only resolve in Reading mode. Investigation plan preserved in task-bugs.md. **Deferred to v2.**
+
+---
+
+## Phase 12: Release Preparation — Community Directory Submission
+
+**Cycles:** Linear — all tasks must complete before tagging v1.3.0 on main. Implements [OBJ-021](objectives.md#v13-release-infrastructure-objectives).
+
+```
+TASK-1201 (LICENSE) ──→ (independent)
+TASK-1202 (manifest) ──→ (independent)
+TASK-1203 (CI workflow) ──→ (independent)
+TASK-1204 (gitignore) ──→ (independent)
+TASK-1205 (package.json) ──→ (independent)
+TASK-1206 (branch strategy) ──→ (depends on all above)
+```
+
+**Parallel opportunities:** TASK-1201 through 1205 are all independent. TASK-1206 must run last (branch merges + push).
+
+### TASK-1201: Create LICENSE file [DONE]
+
+**Depends on:** nothing. **Parallel with:** TASK-1202–1205.
+
+Create a `LICENSE` file at repository root with the MIT license. Required by the Obsidian Community Directory submission guidelines (see [Submit your plugin](<file:///home/lucas_galdino/.agents/skills/obsidian/obsidian-plugins/references/Plugins/Releasing/Submit%20your%20plugin.md>)). The `package.json` already declared `"license": "MIT"`.
+
+**Verification:** `LICENSE` file exists at repo root. Content matches standard MIT template with copyright holder "Lucas Galdino".
+
+### TASK-1202: Fix manifest.json author fields [DONE]
+
+**Depends on:** nothing. **Parallel with:** TASK-1201, TASK-1203–1205.
+
+Populate the empty `author` and `authorUrl` fields in `manifest.json`. The Obsidian Community Directory displays these on the plugin listing page.
+
+**Changes:**
+
+- `"author": "Lucas Galdino"`
+- `"authorUrl": "https://github.com/lucasgaldinos"`
+
+**Verification:** `manifest.json` contains valid author and authorUrl. `authorUrl` is a valid HTTPS URL.
+
+### TASK-1203: Create GitHub Actions release workflow [DONE]
+
+**Depends on:** nothing. **Parallel with:** TASK-1201–1202, TASK-1204–1205.
+
+Create `.github/workflows/release.yml` to automate plugin releases per the [Obsidian release guide](<file:///home/lucas_galdino/.agents/skills/obsidian/obsidian-plugins/references/Plugins/Releasing/Release%20your%20plugin%20with%20GitHub%20Actions.md>).
+
+**Workflow behavior:**
+
+1. Triggered on tag push (`*` pattern)
+2. Checks out repo, installs Node.js 20.x, runs `npm install && npm run build`
+3. Creates a **draft** GitHub Release with `main.js`, `manifest.json`, and `styles.css` as binary attachments
+4. Release must be manually reviewed and published via GitHub UI
+
+**Cost:** $0 — GitHub Actions is free for public repositories with unlimited minutes.
+
+**Verification:** `.github/workflows/release.yml` exists. Workflow syntax is valid YAML. Uses `actions/checkout@v4` and `actions/setup-node@v4`.
+
+### TASK-1204: Update .gitignore [DONE]
+
+**Depends on:** nothing. **Parallel with:** TASK-1201–1203, TASK-1205.
+
+Harden `.gitignore` to prevent accidentally committing user data or binary artifacts.
+
+**Changes:**
+
+- Add `data.json` — plugin runtime settings (user-specific, written by Obsidian)
+- Add `*.png` — screenshot artifacts
+- Refine `.github/` → `.github/instructions` (allow workflow files to be tracked)
+- Refine `.agents/` pattern for agent instruction files
+
+**Verification:** `data.json`, `*.png` files are not tracked by git. `.github/workflows/release.yml` IS tracked.
+
+### TASK-1205: Align package.json version with manifest [DONE]
+
+**Depends on:** nothing. **Parallel with:** TASK-1201–1204.
+
+`package.json` had `"version": "1.1.0"` while `manifest.json` had `"version": "1.3.0"`. Align both to `1.3.0`. Also set `"author": "Lucas Galdino"` in `package.json`.
+
+**Verification:** Both files declare version `1.3.0`. `npm install` succeeds.
+
+### TASK-1206: Branch strategy — DEBUG_ENABLED per branch [DONE]
+
+**Depends on:** TASK-1201–1205 (all infrastructure changes must be committed first).
+
+Implement the production/development branch split for debug logging control.
+
+**Strategy:**
+
+- `main` branch: `DEBUG_ENABLED = false` — production, no console noise, ready for release tagging
+- `dev` branch: `DEBUG_ENABLED = true` — full diagnostic logging for development
+- `feature/*` branches: inherit from dev (DEBUG_ENABLED = true)
+
+**Execution:**
+
+1. Commit all TASK-1201–1205 changes on feature branch
+2. Merge feature → main (fast-forward)
+3. On main: set `DEBUG_ENABLED = false`, commit, push
+4. Merge feature → dev (fast-forward, DEBUG stays true), push
+5. Delete remote feature branch
+
+**Verification:**
+
+- `git show main:src/debug.ts | grep DEBUG_ENABLED` → `false`
+- `git show dev:src/debug.ts | grep DEBUG_ENABLED` → `true`
+- Both branches pushed to origin
+
+---
+
+## Phase 13: Community Review Compliance
+
+**Cycles:** Iterative — Obsidian's automated review linter reports warnings, we fix them, resubmit. Each iteration discovers new warnings not visible in local development.
+
+```
+TASK-1301 (eliminate any) ──→ TASK-1302 (this: void) ──→ TASK-1303 (console) ──→ TASK-1304 (CI)
+```
+
+**Context:** The Obsidian community plugin review runs an automated linter that checks:
+- No `any` types (or `@typescript-eslint/no-explicit-any` suppressions)
+- No `console.log` in production builds
+- No `function()` methods without `this: void` annotation (or use arrow functions)
+- No `setTimeout`/`clearTimeout` without `window.` prefix
+- No unused imports
+- No `eslint-disable` directive comments
+
+### TASK-1301: Eliminate `any` types [DONE]
+
+**Depends on:** Phase 12 (release infrastructure).
+
+Replace all `any` casts with proper TypeScript interfaces and type guards.
+
+**Changes:**
+- `src/vault-config.ts`: `getVaultConfig(vault, key): unknown` + `isWikilinksEnabled(vault): boolean`
+- `src/patch-editor-suggest.ts`: `SuggestionValue`, `EditorSuggestInstance`, `SuggestionDropdownItem` interfaces, `unwrapDropdownItem()` type guard
+- `src/types.ts`: `position?: Pos` (from obsidian) instead of `any`
+- `src/virtual-block.ts`: `injectVirtualBlock` takes typed `Pos`
+- `src/reveal-target.ts`: `view.currentMode` cast as typed interface
+- `main.ts`: `loadData()` cast as `Partial<GfmSettings>`
+
+**Verification:** `npx tsc --noEmit` passes with `strict: true`. Zero `any` keywords in src/ (except necessary `unknown[]` in spread args).
+
+### TASK-1302: Fix `this: void` linter warnings [DONE]
+
+**Depends on:** TASK-1301.
+
+Obsidian's linter flags methods detached from their objects without binding.
+
+**Changes:**
+- Arrow functions for `workspace.openLinkText`, `workspace.trigger` assignments
+- `.bind(workspace)` at method capture: `const originalOpenLinkText = workspace.openLinkText.bind(workspace)`
+- `.call(workspace, ...)` replaced with direct calls (binding makes `.call` redundant)
+- `patch-editor-suggest.ts`: regular `function()` preserved (needs `this` for suggestor context)
+
+**Verification:** Obsidian review linter passes. No `this: void` warnings.
+
+### TASK-1303: Production console hygiene [DONE]
+
+**Depends on:** TASK-1301.
+
+**Changes:**
+- `console.log` → `console.debug` in `src/debug.ts` (suppressed by default in DevTools)
+- `window.setTimeout` / `window.clearTimeout` throughout codebase
+- Removed unused imports from `main.ts`
+- `new Array<number>(n).fill(0)` for safe array initialization
+
+**Verification:** `grep -r 'console\.log' src/` returns zero results.
+
+### TASK-1304: CI artifact attestations [DONE]
+
+**Depends on:** TASK-1203 (CI workflow).
+
+Add supply-chain provenance to release artifacts via `actions/attest@v4`.
+
+**Changes:**
+- Added `id-token: write` and `attestations: write` permissions to release workflow
+- Added `actions/attest@v4` step after build

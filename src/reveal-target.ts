@@ -90,7 +90,7 @@ export function revealTargetInView(view: View, target: AnchorTarget) {
         view.setEphemeralState({ line: target.line });
 
         // STEP 2: Trigger the native highlight animation. We access the current editor mode (source mode or reading mode). The mode object has an `applyScroll` method that handles the smooth scrolling and yellow flash effect.
-        const mode = view.currentMode as any;
+        const mode = view.currentMode as { applyScroll?: (line: number, opts: { center: boolean; highlight: boolean }) => void } | null;
 
         // Check that applyScroll exists before calling it. This guards against future Obsidian versions that may rename or remove this internal method.
         if (mode && typeof mode.applyScroll === "function") {

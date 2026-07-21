@@ -105,12 +105,12 @@ export const DEBUG_ENABLED = true;
  * });
  * // Console: [GFM Heading Links] resolve:success ▶ { slug: "my-heading", file: "notes/example.md", line: 42, type: "heading" }
  */
-export function debugLog(event: string, payload?: any) {
+export function debugLog(event: string, payload?: Record<string, unknown>) {
     if (DEBUG_ENABLED) {
         if (payload !== undefined) {
-            console.log(`[GFM Heading Links] ${event}`, payload);
+            console.debug(`[GFM Heading Links] ${event}`, payload);
         } else {
-            console.log(`[GFM Heading Links] ${event}`);
+            console.debug(`[GFM Heading Links] ${event}`);
         }
     }
 }

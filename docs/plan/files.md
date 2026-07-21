@@ -3,7 +3,7 @@ title: "Files & Risks"
 tags: [architecture, plan, files, risks]
 description: "15 files expected to change (new and modified) and 6 risk mitigations for the GFM Heading Links redesign."
 date_created: 2026-07-08
-date_changed: 2026-07-16
+date_changed: 2026-07-18
 author: ["Lucas Galdino", "GitHub Copilot"]
 plan_version: "2.0"
 parent: "[[plan.md]]"
@@ -36,7 +36,10 @@ Each file maps to the [task](tasks.md) that creates or modifies it.
 | `package.json` | Add `vitest`, add `"test"` script. |
 | `README.md` | Update architecture explanation. |
 | `CHANGELOG.md` | Document architecture change. |
-| `docs/plan/*.md` | **Plan files.** `plan.md` (overview), `objectives.md` (8 objectives + architecture decisions), `design.md` (workflows + 5-layer architecture), `tasks.md` (7 phases, 24+ tasks), `validation.md` (validation matrix + debug events), `files.md` (changed files + risk mitigations), `task-bugs.md` (bug tracker). |
+| `LICENSE` | **New (v1.3 release prep).** MIT license for community directory submission. |
+| `.github/workflows/release.yml` | **New (v1.3 release prep).** GitHub Actions workflow — auto-builds `main.js` on tag push, creates draft GitHub Release with binary attachments. |
+| `.gitignore` | **Updated (v1.3 release prep).** Added `data.json`, `*.png` exclusions. Refined `.github/` and `.agents/` patterns. |
+| `docs/plan/*.md` | **Plan files.** `plan.md` (overview), `objectives.md` (8 objectives + architecture decisions), `design.md` (workflows + 5-layer architecture), `tasks.md` (8 phases, 30+ tasks), `validation.md` (validation matrix + debug events), `files.md` (changed files + risk mitigations), `task-bugs.md` (bug tracker). |
 
 ## Risks and mitigations
 

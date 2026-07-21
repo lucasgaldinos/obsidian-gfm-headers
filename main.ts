@@ -2,14 +2,13 @@ import { Plugin, TFile } from "obsidian";
 import { applyClickPatch } from "./src/patch-link-click";
 import { applyHoverPatch } from "./src/patch-link-hover";
 import { applyEditorSuggestPatches } from "./src/patch-editor-suggest";
-import { debugLog, DEBUG_ENABLED } from "./src/debug";
 import { GfmSettingsTab, DEFAULT_SETTINGS, type GfmSettings } from "./src/settings";
 import { IndexCache } from "./src/index-cache";
 import type { GfmHeadingLinksPlugin } from "./src/resolve-target";
 
 /**
  * Main plugin class for GFM Heading Links.
- * 
+ *
  * This plugin intercepts Obsidian's native link resolution and editor suggestions
  * to allow users to use GitHub Flavored Markdown (GFM) standard slugs (e.g., `#my-heading`)
  * in their markdown links, instead of Obsidian's proprietary heading format (`#My Heading`).
@@ -36,13 +35,13 @@ export default class GfmHeadingLinksPluginImpl extends Plugin implements GfmHead
 
   /**
    * Initializes the plugin when it is enabled by the user.
-   * 
+   *
    * Note on patching:
    * We pass `this` (the plugin instance) to standalone functions like `applyWorkspacePatches(this)`.
    * Because those functions are defined in separate files, they need this reference to access Obsidian's API.
-   * 
+   *
    * These patching functions execute their injections immediately and RETURN a "cleanup function" definition.
-   * By pushing these returned functions into our `cleanupFunctions` array, we are saving the 
+   * By pushing these returned functions into our `cleanupFunctions` array, we are saving the
    * restoration instructions on a shelf. The cleanup code does not run yet.
    */
   async onload() {
@@ -95,12 +94,12 @@ export default class GfmHeadingLinksPluginImpl extends Plugin implements GfmHead
 
     const hoverCleanup = applyHoverPatch(this);
     this.cleanupFunctions.push(hoverCleanup);
-    
+
     // Register the settings tab (TASK-1003)
     this.addSettingTab(new GfmSettingsTab(this.app, this));
 
     // Defer the editor suggest patch slightly to ensure Obsidian's native suggestors are loaded
-    setTimeout(() => {
+    window.setTimeout(() => {
       const editorSuggestCleanup = applyEditorSuggestPatches(this);
       this.cleanupFunctions.push(editorSuggestCleanup);
     }, 1000);
@@ -112,7 +111,7 @@ export default class GfmHeadingLinksPluginImpl extends Plugin implements GfmHead
    * don't break existing user configurations.
    */
   async loadSettings() {
-    const data = await this.loadData();
+    const data = await this.loadData() as Partial<GfmSettings>;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
   }
 
@@ -125,9 +124,9 @@ export default class GfmHeadingLinksPluginImpl extends Plugin implements GfmHead
 
   /**
    * Cleans up the plugin when it is disabled to prevent memory leaks and restore native behavior.
-   * 
+   *
    * This method iterates through the `cleanupFunctions` array and actually executes each one.
-   * Running these functions restores the backups of Obsidian's original logic. 
+   * Running these functions restores the backups of Obsidian's original logic.
    * Finally, we set the array to empty to release the closures from memory (Garbage Collection).
    */
   onunload() {

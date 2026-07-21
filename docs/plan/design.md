@@ -3,7 +3,7 @@ title: "Design: How It Works"
 tags: [architecture, plan, design, internals]
 description: "5-layer architecture, data flows, design decisions, and known limitations."
 date_created: 2026-07-08
-date_changed: 2026-07-16
+date_changed: 2026-07-18
 author: ["Lucas Galdino", "GitHub Copilot"]
 plan_version: "2.0"
 parent: "[[plan.md]]"
@@ -13,7 +13,7 @@ parent: "[[plan.md]]"
 
 > See [`objectives.md`](objectives.md) for why, [`tasks.md`](tasks.md) for build order, [`validation.md`](validation/validation.md) for test coverage.
 >
-> **v1.3 (complete):** All 9 tasks done — 6 code quality refactoring + settings tab + wikilink alias + link affixes. See [Phase 10](tasks.md#phase-10-v13--code-quality-refactoring--settings--wikilink-alias).
+> **v1.3 (complete):** All 9 tasks done — 6 code quality refactoring + settings tab + wikilink alias + link affixes. See [Phase 10](tasks.md#phase-10-v13--code-quality-refactoring--settings--wikilink-alias). Release infrastructure (Phase 12) complete — LICENSE, CI workflow, branch strategy.
 
 ## 1. Architecture Overview
 

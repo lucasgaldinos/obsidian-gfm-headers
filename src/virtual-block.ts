@@ -20,7 +20,7 @@
  * Extracted per TASK-1006. DRY, single source of truth for the cleanup timeout.
  */
 
-import type { CachedMetadata } from "obsidian";
+import type { CachedMetadata, Pos } from "obsidian";
 
 /**
  * Time in milliseconds before injected virtual blocks are cleaned up from
@@ -60,7 +60,7 @@ export const VIRTUAL_BLOCK_CLEANUP_MS = 1500;
 export function injectVirtualBlock(
     cache: CachedMetadata,
     slug: string,
-    position: any,
+    position: Pos,
     prefix: string
 ): () => void {
     const virtualId = `${prefix}${slug}`;
@@ -77,7 +77,7 @@ export function injectVirtualBlock(
     };
 
     // Schedule automatic cleanup
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
         if (cache.blocks && cache.blocks[virtualId]) {
             delete cache.blocks[virtualId];
         }
@@ -85,7 +85,7 @@ export function injectVirtualBlock(
 
     // Return manual cleanup function (also clears the timeout)
     return () => {
-        clearTimeout(timer);
+        window.clearTimeout(timer);
         if (cache.blocks && cache.blocks[virtualId]) {
             delete cache.blocks[virtualId];
         }

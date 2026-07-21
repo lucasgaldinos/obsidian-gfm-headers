@@ -28,7 +28,7 @@
  * - `ResolutionResult`: The outcome of trying to resolve a slug
  */
 
-import type { TFile } from "obsidian";
+import type { TFile, Pos } from "obsidian";
 
 /**
  * Represents a markdown heading that has been resolved from a GFM slug.
@@ -80,18 +80,11 @@ export interface HeadingAnchorTarget {
     endLine: number;
 
     /**
-     * The full position range object (start to end) for this heading's section. This is injected into `cache.blocks` as a virtual block so Obsidian's native scrolling mechanism can locate the target.
-     *
-     * Structure matches Obsidian's internal Pos format:
-     * ```ts
-     * {
-     *   start: { line: number, col: number, offset: number },
-     *   end:   { line: number, col: number, offset: number }
-     * }
-     * ```
-     * Typed as `any` to avoid coupling to Obsidian's internal type definitions which may change between versions.
+     * The full position range object (start to end) for this heading's section.
+     * Injected into cache.blocks as a virtual block so Obsidian's native
+     * scrolling mechanism can locate the target.
      */
-    position?: any;
+    position?: Pos;
 }
 
 /**

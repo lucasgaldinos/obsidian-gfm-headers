@@ -3,7 +3,7 @@ title: "Changelog"
 tags: [changelog, gfm-heading-links, obsidian-plugin]
 description: "Release history and notable changes for the GFM Heading Links Obsidian plugin"
 date_created: 2026-07-02
-date_changed: 2026-07-03
+date_changed: 2026-07-18
 author: "Lucas Galdino"
 ---
 
@@ -16,6 +16,67 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 
 [keepachangelog]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
+
+## [1.3.1][] — 2026-07-20
+
+> **Note:** This release consolidates the original v1.3.1 release infrastructure work and all
+> subsequent community review compliance fixes (previously spread across v1.3.2–1.3.6).
+> Those intermediate releases have been deleted — this is the definitive v1.3.1.
+
+### Added
+
+- **Release Infrastructure**: `LICENSE` (MIT), GitHub Actions release workflow
+  (`.github/workflows/release.yml`), branch strategy (`main`=production/DEBUG_ENABLED=false,
+  `dev`=development/DEBUG_ENABLED=true).
+- **CI Artifact Attestations** (`actions/attest@v4`): Supply-chain provenance for release
+  artifacts.
+- `author` and `authorUrl` populated in `manifest.json`.
+- `.gitignore` hardened: `data.json`, `*.png` exclusions, refined `.github/` and `.agents/`
+  patterns.
+- **Typed Internal APIs** (`src/vault-config.ts`): `getVaultConfig()` and `isWikilinksEnabled()`
+  helpers replace inline `(vault as any)` casts.
+- **Type-Safe Editor Suggest**: `SuggestionValue`, `EditorSuggestInstance`,
+  `SuggestionDropdownItem` interfaces and `unwrapDropdownItem()` type guard — all `any`
+  types eliminated from the suggest pipeline.
+
+### Changed
+
+- `package.json` version aligned with `manifest.json` (both `1.3.1`).
+- All documentation updated: `docs/plan/*`, `docs/research/architectural-history.md`,
+  `docs/architecture.md`, `README.md`.
+- Release links in `CHANGELOG.md` fixed to point to `lucasgaldinos/obsidian-gfm-headers`.
+- **Production console hygiene**: `console.log` → `console.debug` in gated debug system
+  (`src/debug.ts`). `console.debug` is suppressed by default in browser DevTools at the
+  default "Info" log level.
+- **Arrow functions for all monkeypatch assignments**: `workspace.openLinkText`,
+  `workspace.trigger`, and `suggest.selectSuggestion` all use arrow functions with
+  explicit `.call(workspace, ...)` rebinding.
+- **`.bind(workspace)` at method capture**: `originalOpenLinkText` and `originalTrigger`
+  are bound at capture time via `.bind(workspace)`, eliminating `this`-scoping warnings
+  from Obsidian's review linter.
+- **Safe array initialization**: `new Array<number>(n).fill(0)` replaces `new Array(n).fill(0)`
+  to avoid implicit `any[]` inference.
+- `window.setTimeout` / `window.clearTimeout` used instead of bare `setTimeout` /
+  `clearTimeout` for browser global compliance.
+- `loadData()` cast as `Partial<GfmSettings>` instead of `as any`.
+- `view.currentMode` cast as typed interface instead of `as any`.
+- `injectVirtualBlock` and `selectSuggestion` use typed `Pos` and `SuggestionValue` params.
+
+### Removed
+
+- Accidentally committed `image.png`, `image copy.png`, and `data.json`.
+- All `eslint-disable` and `@typescript-eslint/no-explicit-any` directive comments.
+- Unused `debugLog` / `DEBUG_ENABLED` import from `main.ts`.
+- Non-existent `styles.css` from CI release assets.
+
+### Fixed
+
+- **`this: void` linter warnings**: Original methods captured from `workspace` are now
+  bound via `.bind(workspace)` at capture time, preventing `this`-scoping errors when
+  the method is called detached from its object.
+- **Review linter compliance**: Addressed all warnings reported by Obsidian's automated
+  plugin review — no `any` types, no `console.log` in production builds, no directive
+  suppressions, no `function()` without `this: void`.
 
 ## [1.3.0][] — 2026-07-17
 
@@ -40,6 +101,7 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - Hover handler no longer uses `require("./document-index")` inlining — delegates to `resolveGfmTargetSync()`.
 - Settings tab uses declarative `getSettingDefinitions()` API (Obsidian 1.13.0+) with `display()` fallback.
 - `minAppVersion` set to `1.12.7` for dual settings API support.
+- `DEBUG_ENABLED = true` on dev branch — set to `false` for production builds.
 
 ### Fixed
 
@@ -111,8 +173,8 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 > [!note]
 > No behavioral changes were introduced. The plugin logic is structurally identical to the
 > pre-refactor version. The reading-view path (post-processor + MutationObserver) is known to
-> work; the editing-mode path (CM6 ViewPlugin) requires further debugging — see
-> [failed-logic.md](failed-logic.md) and [starting-point.md](starting-point.md).
+> work; the editing-mode path (CM6 ViewPlugin) was later replaced by the workspace-level
+> monkeypatch architecture in v1.1.0.
 
 ### Changed
 
@@ -139,8 +201,9 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - Editing-mode (Source & Live Preview) link interception via a CM6 `ViewPlugin.fromClass`
   extension that captures mousedown events.
 
-[1.3.0]: https://github.com/user/obsidian-gfm-headers/releases/tag/1.3.0
-[1.2.0]: https://github.com/user/obsidian-gfm-headers/releases/tag/1.2.0
-[1.1.0]: https://github.com/user/obsidian-gfm-headers/releases/tag/1.1.0
-[1.0.0]: https://github.com/user/obsidian-gfm-headers/releases/tag/1.0.0
-[0.1.0]: https://github.com/user/obsidian-gfm-headers/releases/tag/0.1.0
+[1.3.1]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.3.1
+[1.3.0]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.3.0
+[1.2.0]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.2.0
+[1.1.0]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.1.0
+[1.0.0]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.0.0
+[0.1.0]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/0.1.0

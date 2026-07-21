@@ -29,10 +29,9 @@
  * ```
  */
 
-import { MarkdownView } from "obsidian";
+import { MarkdownView, type OpenViewState, type PaneType } from "obsidian";
 import { resolveGfmTarget, type GfmHeadingLinksPlugin } from "./resolve-target";
 import { revealTargetInView } from "./reveal-target";
-import { debugLog } from "./debug";
 import { injectVirtualBlock } from "./virtual-block";
 
 /**
@@ -44,14 +43,14 @@ import { injectVirtualBlock } from "./virtual-block";
  */
 export function applyClickPatch(plugin: GfmHeadingLinksPlugin): () => void {
     const workspace = plugin.app.workspace;
-    const originalOpenLinkText = workspace.openLinkText;
+    const originalOpenLinkText = workspace.openLinkText.bind(workspace);
 
-    workspace.openLinkText = async function (
+    workspace.openLinkText = async (
         linktext: string,
         sourcePath: string,
-        newLeaf?: any,
-        openViewState?: any
-    ) {
+        newLeaf?: PaneType | boolean,
+        openViewState?: OpenViewState
+    ) => {
         try {
             if (typeof linktext === "string") {
                 const hashIdx = linktext.indexOf("#");
@@ -66,20 +65,20 @@ export function applyClickPatch(plugin: GfmHeadingLinksPlugin): () => void {
                         if (targetResolution.target.type === "heading") {
                             // Virtual Block Injection for native highlighting
                             const cache = plugin.app.metadataCache.getFileCache(targetResolution.file);
-                            if (cache) {
+                            if (cache && targetResolution.target.position) {
                                 injectVirtualBlock(cache, targetResolution.target.slug, targetResolution.target.position, "gfm-click-");
 
                                 // Delegate back to Obsidian with the virtual block
                                 const virtualId = `gfm-click-${targetResolution.target.slug}`;
                                 const targetLinktext = notePath ? `${notePath}#^${virtualId}` : `#^${virtualId}`;
-                                const res = await originalOpenLinkText.call(this, targetLinktext, sourcePath, newLeaf, openViewState);
+                                const res = await originalOpenLinkText(targetLinktext, sourcePath, newLeaf, openViewState);
 
                                 return res;
                             }
                         }
 
                         // Fallback manual reveal (HTML Anchors or if cache fails)
-                        await originalOpenLinkText.call(this, targetResolution.file.path, sourcePath, newLeaf, openViewState);
+                        await originalOpenLinkText(targetResolution.file.path, sourcePath, newLeaf, openViewState);
 
                         // Find the view and scroll to the target line
                         const view = plugin.app.workspace.getActiveViewOfType(MarkdownView);
@@ -104,7 +103,7 @@ export function applyClickPatch(plugin: GfmHeadingLinksPlugin): () => void {
         }
 
         // Passthrough to native handler
-        return originalOpenLinkText.call(this, linktext, sourcePath, newLeaf, openViewState);
+        return originalOpenLinkText(linktext, sourcePath, newLeaf, openViewState);
     };
 
     return () => {

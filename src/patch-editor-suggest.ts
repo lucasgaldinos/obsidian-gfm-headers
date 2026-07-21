@@ -45,12 +45,31 @@
 
 import { gfmSlugify, allocateUniqueSlug } from "./gfm-slugify";
 import { debugLog } from "./debug";
+import { isWikilinksEnabled } from "./vault-config";
 import type { GfmHeadingLinksPlugin } from "./resolve-target";
+
+/**
+ * Shape of the suggestion value object emitted by Obsidian's EditorSuggest.
+ * Obsidian does not publicly type this — we define the subset we depend on.
+ */
+interface SuggestionValue {
+    heading?: string;
+    level?: number;
+    subpath?: string;
+    file?: import("obsidian").TFile;
+    item?: {
+        heading?: string;
+        subpath?: string;
+        file?: import("obsidian").TFile;
+        alias?: string;
+    };
+    alias?: string;
+}
 
 /**
  * Pure transformation pipeline for heading autocomplete suggestions.
  *
- * Applies 5 mutations in a fixed order to convert Obsidian's native heading
+ * Applies 4 mutations in a fixed order to convert Obsidian's native heading
  * format into a GFM-compliant link. Extracted from the `selectSuggestion`
  * monkeypatch wrapper per TASK-1010 to enable independent unit testing
  * without mocking Obsidian's suggestor infrastructure.
@@ -71,10 +90,10 @@ import type { GfmHeadingLinksPlugin } from "./resolve-target";
  *          subpath was modified.
  */
 export function transformSuggestion(
-    suggestionValue: any,
+    suggestionValue: SuggestionValue,
     plugin: GfmHeadingLinksPlugin,
-    suggestInstance?: any
-): { suggestionValue: any; didModifySubpath: boolean } {
+    suggestInstance?: { chooser?: { values?: SuggestionValue[] } }
+): { suggestionValue: SuggestionValue; didModifySubpath: boolean } {
     if (!suggestionValue || typeof suggestionValue !== 'object') {
         return { suggestionValue, didModifySubpath: false };
     }
@@ -136,8 +155,7 @@ export function transformSuggestion(
     // Step 4: Wikilink-aware editor suggestions (TASK-1001)
     // When wikilinks are enabled, set the pipe-alias so Obsidian generates
     // [[file#gfm-slug|Alias]] instead of just [[file#gfm-slug]].
-    const useMarkdownLinks = (plugin.app.vault as any).getConfig?.("useMarkdownLinks") ?? true;
-    if (!useMarkdownLinks) {
+    if (isWikilinksEnabled(plugin.app.vault)) {
         if (suggestionValue.heading) {
             suggestionValue.alias = String(suggestionValue.heading);
         }
@@ -147,6 +165,40 @@ export function transformSuggestion(
     }
 
     return { suggestionValue, didModifySubpath };
+}
+
+/**
+ * Minimal interface for Obsidian's internal EditorSuggest instance.
+ *
+ * Obsidian does not publicly type its suggestor infrastructure. This interface
+ * describes only the subset of properties accessed by `resolveGfmSlug()` for
+ * dropdown occurrence matching. Property names are based on decompiled
+ * Obsidian internals and may vary across versions — the runtime code handles
+ * multiple possible shapes defensively.
+ */
+interface EditorSuggestInstance {
+    chooser?: {
+        values?: SuggestionDropdownItem[];
+        items?: SuggestionDropdownItem[];
+        suggestions?: SuggestionDropdownItem[];
+    };
+    suggestions?: {
+        values?: SuggestionDropdownItem[];
+        items?: SuggestionDropdownItem[];
+        suggestions?: SuggestionDropdownItem[];
+    };
+}
+
+/** A single item in Obsidian's autocomplete dropdown — either a raw suggestion or wrapped. */
+type SuggestionDropdownItem = SuggestionValue | { item: SuggestionValue };
+
+/** Extracts the SuggestionValue from a dropdown item, unwrapping if necessary. */
+function unwrapDropdownItem(raw: SuggestionDropdownItem): SuggestionValue | undefined {
+    if (!raw) return undefined;
+    // Wrapper form: { item: SuggestionValue }
+    if ('item' in raw && raw.item) return raw.item;
+    // Raw form: SuggestionValue (already has heading/level/subpath)
+    return raw;
 }
 
 /**
@@ -183,7 +235,11 @@ export function transformSuggestion(
  * @returns The complete GFM link fragment (e.g., `"#my-heading"` or
  *          `"#my-heading-1"`) or `null` if resolution fails.
  */
-function resolveGfmSlug(value: any, app: any, suggestInstance?: any): string | null {
+function resolveGfmSlug(
+    value: SuggestionValue,
+    app: import("obsidian").App,
+    suggestInstance?: EditorSuggestInstance
+): string | null {
     // GUARD: Validate that the value has the expected shape.
     // If any required property is missing, we can't resolve — return null
     // and let the caller fall back to simple gfmSlugify().
@@ -214,21 +270,15 @@ function resolveGfmSlug(value: any, app: any, suggestInstance?: any): string | n
                 // The selected item may be wrapped (e.g., `{ item: value }`) or unwrapped,
                 // so we check both `s === value` and `s.item === value`.
                 const selectedIndex = suggestionsArray.findIndex(
-                    (s: any) => s === value || s.item === value
+                    (s) => s === value || ('item' in s && s.item === value)
                 );
 
                 if (selectedIndex !== -1) {
-                    // Count how many identical items (same heading text + level)
-                    // appear BEFORE the selected item. This becomes our occurrence index.
-                    //
-                    // Example: dropdown shows [Intro, Methods, Intro, Results, Intro]
-                    // If user picks the third "Intro" (index 4), we count 2 matches
-                    // before it (indices 0 and 2), so occurrenceIndex = 2.
                     for (let i = 0; i < selectedIndex; i++) {
-                        const suggestionValue = suggestionsArray[i]?.item || suggestionsArray[i];
-                        if (suggestionValue &&
-                            suggestionValue.heading === value.heading &&
-                            suggestionValue.level === value.level) {
+                        const entry = unwrapDropdownItem(suggestionsArray[i]);
+                        if (entry &&
+                            entry.heading === value.heading &&
+                            entry.level === value.level) {
                             occurrenceIndex++;
                         }
                     }
@@ -326,10 +376,14 @@ function resolveGfmSlug(value: any, app: any, suggestInstance?: any): string | n
  */
 export function applyEditorSuggestPatches(plugin: GfmHeadingLinksPlugin): () => void {
     // Access Obsidian's internal editor suggest registry.
-    // This is an undocumented internal API — it may change between Obsidian versions.
-    // We wrap the access in a type assertion to `any` because the TypeScript
-    // definitions don't expose this property.
-    const suggests = (plugin.app.workspace as any).editorSuggest?.suggests;
+    // This is an undocumented internal API not exposed in Obsidian's public types.
+    const suggests = (plugin.app.workspace as {
+        editorSuggest?: {
+            suggests?: Array<{
+                selectSuggestion?: (value: SuggestionValue, evt: KeyboardEvent | MouseEvent) => void
+            }>
+        }
+    }).editorSuggest?.suggests;
 
     // GUARD: If we can't find the suggests array (e.g., Obsidian changed its
     // internal API), bail out gracefully. The plugin will still work for
@@ -360,13 +414,11 @@ export function applyEditorSuggestPatches(plugin: GfmHeadingLinksPlugin): () => 
             // Replace with our wrapper function.
             // We use a regular function (not arrow) so `this` refers to the suggestor
             // instance when the original method is called.
-            suggest.selectSuggestion = function(suggestionValue: any, evt: any) {
+            suggest.selectSuggestion = function(suggestionValue: SuggestionValue, evt: KeyboardEvent | MouseEvent) {
                 try {
                     debugLog("suggest:selected", { heading: suggestionValue?.heading, level: suggestionValue?.level });
-                    const result = transformSuggestion(suggestionValue, plugin, this);
+                    const result = transformSuggestion(suggestionValue, plugin, this as unknown as EditorSuggestInstance);
                     suggestionValue = result.suggestionValue;
-                    // Capture the heading WITH affixes for wikilink alias injection
-                    const displayHeading = suggestionValue?.heading || suggestionValue?.item?.heading;
                     if (result.didModifySubpath) {
                         debugLog("suggest:mutated", { subpath: suggestionValue?.subpath || suggestionValue?.item?.subpath });
                     }
@@ -379,8 +431,7 @@ export function applyEditorSuggestPatches(plugin: GfmHeadingLinksPlugin): () => 
 
                 // TASK-1001: For wikilinks, inject |Heading alias after insertion
                 // Uses workspace.activeEditor since suggestor context has no editor.
-                const useMarkdownLinks = (plugin.app.vault as any).getConfig?.("useMarkdownLinks");
-                if (plugin.settings.enableWikilinkAlias && useMarkdownLinks === false && suggestionValue?.heading) {
+                if (plugin.settings.enableWikilinkAlias && isWikilinksEnabled(plugin.app.vault) && suggestionValue?.heading) {
                     const editor = plugin.app.workspace.activeEditor?.editor;
                     if (editor) {
                         const cursor = editor.getCursor();
