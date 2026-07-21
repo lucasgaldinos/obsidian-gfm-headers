@@ -1,6 +1,6 @@
 # GFM Heading Links
 
-[![Version](https://img.shields.io/badge/version-1.3.7-blue)](https://github.com/lucasgaldinos/obsidian-gfm-headers/releases)
+[![Version](https://img.shields.io/badge/version-1.3.8-blue)](https://github.com/lucasgaldinos/obsidian-gfm-headers/releases)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Obsidian](https://img.shields.io/badge/Obsidian-%E2%89%A5%201.0.0-8b5cf6)](https://obsidian.md)
 
