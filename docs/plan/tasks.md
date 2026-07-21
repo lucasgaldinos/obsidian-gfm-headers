@@ -1124,6 +1124,7 @@ TASK-1301 (eliminate any) ──→ TASK-1302 (this: void) ──→ TASK-1303 (
 ```
 
 **Context:** The Obsidian community plugin review runs an automated linter that checks:
+
 - No `any` types (or `@typescript-eslint/no-explicit-any` suppressions)
 - No `console.log` in production builds
 - No `function()` methods without `this: void` annotation (or use arrow functions)
@@ -1135,9 +1136,10 @@ TASK-1301 (eliminate any) ──→ TASK-1302 (this: void) ──→ TASK-1303 (
 
 **Depends on:** Phase 12 (release infrastructure).
 
-Replace all `any` casts with proper TypeScript interfaces and type guards.
+Replace all `any` casts with proper typescript interfaces and type guards.
 
 **Changes:**
+
 - `src/vault-config.ts`: `getVaultConfig(vault, key): unknown` + `isWikilinksEnabled(vault): boolean`
 - `src/patch-editor-suggest.ts`: `SuggestionValue`, `EditorSuggestInstance`, `SuggestionDropdownItem` interfaces, `unwrapDropdownItem()` type guard
 - `src/types.ts`: `position?: Pos` (from obsidian) instead of `any`
@@ -1154,6 +1156,7 @@ Replace all `any` casts with proper TypeScript interfaces and type guards.
 Obsidian's linter flags methods detached from their objects without binding.
 
 **Changes:**
+
 - Arrow functions for `workspace.openLinkText`, `workspace.trigger` assignments
 - `.bind(workspace)` at method capture: `const originalOpenLinkText = workspace.openLinkText.bind(workspace)`
 - `.call(workspace, ...)` replaced with direct calls (binding makes `.call` redundant)
@@ -1166,6 +1169,7 @@ Obsidian's linter flags methods detached from their objects without binding.
 **Depends on:** TASK-1301.
 
 **Changes:**
+
 - `console.log` → `console.debug` in `src/debug.ts` (suppressed by default in DevTools)
 - `window.setTimeout` / `window.clearTimeout` throughout codebase
 - Removed unused imports from `main.ts`
@@ -1180,5 +1184,6 @@ Obsidian's linter flags methods detached from their objects without binding.
 Add supply-chain provenance to release artifacts via `actions/attest@v4`.
 
 **Changes:**
+
 - Added `id-token: write` and `attestations: write` permissions to release workflow
 - Added `actions/attest@v4` step after build
