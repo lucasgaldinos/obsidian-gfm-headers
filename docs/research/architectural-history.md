@@ -68,6 +68,7 @@ Releases are automated via `.github/workflows/release.yml`:
 ### Community Directory Compliance
 
 The [Obsidian submission requirements](<file:///home/lucas_galdino/.agents/skills/obsidian/obsidian-plugins/references/Plugins/Releasing/Submission%20requirements%20for%20plugins.md>) mandate:
+
 - `LICENSE` file at repo root (MIT chosen, matching `package.json`)
 - `manifest.json` with populated `author` and `authorUrl`
 - Plugin description ≤250 chars, ending with period, no emoji
