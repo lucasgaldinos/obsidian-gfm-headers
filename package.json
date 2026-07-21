@@ -5,19 +5,17 @@
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
-    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@codemirror/language": "^6.12.4",
-    "@codemirror/state": "^6.7.0",
-    "@codemirror/view": "^6.43.4",
-    "@lezer/common": "^1.5.2",
     "@types/node": "^20.0.0",
     "esbuild": "^0.24.0",
     "obsidian": "latest",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.10"
   }
 }

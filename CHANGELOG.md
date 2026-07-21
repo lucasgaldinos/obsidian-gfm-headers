@@ -17,6 +17,37 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 [keepachangelog]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
 
+## [1.2.0][] — 2026-07-13
+
+### Added
+
+- **Document Index Architecture**: Lightweight background `Map<gfmSlug, AnchorTarget>` per file, separate from Obsidian's cache. Enables O(1) slug lookups with zero risk of cache contamination.
+- **Virtual Block Injection**: Temporarily injects `#^gfm-click-{slug}` blocks into `cache.blocks` to leverage Obsidian's native block-level scrolling and `.is-flashing` highlight — works correctly for duplicate headings.
+- **Autocomplete GFM Slug Output** (`EditorSuggest.selectSuggestion`): Selecting a heading from the `[[` dropdown now outputs the GFM slug (e.g., `[My Heading](file.md#my-heading)`) while preserving the original heading text as the alias.
+- **Duplicate Heading Resolution in Autocomplete**: Advanced dropdown occurrence-index matching correctly resolves which Nth duplicate was selected, producing the correct collision suffix (`-1`, `-2`, etc.).
+- **HTML Anchor Scanning** (`scanHtmlAnchors`): Parses `<a id="...">` and `<a name="...">` tags for target identification (click navigation in Reading mode).
+- **Structured Debug Logging** (`src/debug.ts`): 15 event types with `DEBUG_ENABLED` toggle for development instrumentation.
+- **Unit Tests** (Vitest, 17 tests): `gfmSlugify` (basic, Unicode, edge cases), `buildDocumentIndex` (collision suffixes, endLine), `resolveGfmTarget` (guard logic).
+
+### Changed
+
+- **Architectural Shift**: Abandoned the speculative `Heading#Heading` subpath navigation. Replaced with Document Index + Virtual Block Injection across all three monkeypatches (`openLinkText`, `trigger('hover-link')`, `EditorSuggest.selectSuggestion`).
+- **Same-file navigation**: Bypassed native resolution for same-file links to eliminate jump-to-top flicker.
+- **HTML in heading aliases**: Autocomplete now strips HTML tags from heading text (e.g., `## Title <a id="x"></a>` → alias `Title`).
+
+### Fixed
+
+- **Hover Preview on duplicate headings**: Corrected `buildDocumentIndex(cache.headings)` → `buildDocumentIndex(cache)` — the former produced an empty index, causing all hover previews to fail.
+- **Alias loss in autocomplete**: Stopped mutating `value.heading` — only `value.subpath` is rewritten to the GFM slug.
+- **`.is-flashing` on duplicates**: Native block navigation handles section highlighting correctly, no longer highlights wrong heading.
+
+### Known Limitations
+
+- HTML anchor click navigation works only in Reading mode (Live Preview / Source mode under investigation — see Bug 10).
+- HTML anchor hover preview is not yet supported (hover interceptor only handles heading-type targets — see Bug 6).
+- GFM collision suffix uses last-write-wins (`Map.set()` overwrites). First-occurrence priority deferred to v2 (see Bug 8).
+- `DEBUG_ENABLED = true` on dev branch — set to `false` for production builds.
+
 ## [1.1.0][] — 2026-07-03
 
 ### Changed
@@ -77,6 +108,7 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - Editing-mode (Source & Live Preview) link interception via a CM6 `ViewPlugin.fromClass`
   extension that captures mousedown events.
 
+[1.2.0]: https://github.com/user/obsidian-gfm-headers/releases/tag/1.2.0
 [1.1.0]: https://github.com/user/obsidian-gfm-headers/releases/tag/1.1.0
 [1.0.0]: https://github.com/user/obsidian-gfm-headers/releases/tag/1.0.0
 [0.1.0]: https://github.com/user/obsidian-gfm-headers/releases/tag/0.1.0

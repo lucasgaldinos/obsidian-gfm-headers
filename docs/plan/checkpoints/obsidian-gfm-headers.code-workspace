@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "../../.."
+		},
+		{
+			"path": "../../../../../../../.agents/plugins/obsidian-plugin/skills/obsidian-plugins"
+		}
+	],
+	"settings": {}
+}
