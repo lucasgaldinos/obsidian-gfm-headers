@@ -42,29 +42,6 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
 - **`npm run lint`** script: Runs ESLint against `main.ts` and `src/*.ts`.
 - **Pre-submission validation** section in README.
 
-## [1.3.7][] — 2026-07-21
-
-### Fixed
-
-- **Community review: ESLint fatal error** — `minAppVersion` in `manifest.json` was `"1.12"`
-  (invalid semver — missing `.0` patch). The `eslint-plugin-obsidianmd` `no-unsupported-api`
-  rule calls `new SemVer("1.12")` which throws `TypeError: Invalid Version`, crashing ESLint
-  entirely. Fixed to `"1.0.0"` (the plugin only uses APIs available since Obsidian 0.12.0).
-- **`versions.json`** — added missing entry `"1.3.7": "1.0.0"` so older Obsidian clients
-  can fall back to a compatible plugin version.
-- **Sentence case in legacy settings UI** (`src/settings.ts`): Fixed 5 `obsidianmd/ui/sentence-case`
-  warnings in the `display()` fallback. "GFM" → "gfm", "Note" → "note", "e.g." → "E.g."
-- **README compatibility statement**: Corrected "Requires Obsidian ≥ 1.12.7" → "Requires
-  Obsidian ≥ 1.0.0" to match the actual minimum API requirements.
-
-### Added
-
-- **ESLint configuration** (`eslint.config.mjs`): Mirrors
-  [obsidian-sample-plugin](https://github.com/obsidianmd/obsidian-sample-plugin)'s setup
-  with `eslint-plugin-obsidianmd` for Obsidian-specific rules. Run `npm run lint` to
-  validate before submitting to the community directory.
-- **`npm run lint`** script: Runs ESLint against `main.ts` and `src/*.ts`.
-
 ## [1.3.1][] — 2026-07-20
 
 > **Note:** This release consolidates the original v1.3.1 release infrastructure work and all
@@ -250,7 +227,6 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   extension that captures mousedown events.
 
 [1.3.8]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.3.8
-[1.3.7]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.3.7
 [1.3.1]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.3.1
 [1.3.0]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.3.0
 [1.2.0]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.2.0
