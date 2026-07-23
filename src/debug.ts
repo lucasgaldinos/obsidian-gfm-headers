@@ -49,7 +49,7 @@
  * toggle in Obsidian's settings UI, but a compile-time constant is simpler
  * and avoids runtime overhead for a check that almost never changes.
  */
-export const DEBUG_ENABLED = true;
+declare const DEBUG_ENABLED: boolean;
 
 /**
  * Conditionally logs a diagnostic event to the browser console.
