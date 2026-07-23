@@ -33,3 +33,5 @@ data.json
 .github/
 !.github/workflows/
 .agents/
+.checkpoints/
+docs/plan/

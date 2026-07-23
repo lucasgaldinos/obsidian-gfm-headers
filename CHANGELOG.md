@@ -252,10 +252,9 @@ The format is based on [Keep a Changelog][keepachangelog], and this project adhe
   extension that captures mousedown events.
 
 [1.3.8]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.3.8
-[1.3.7]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.3.7
-[1.3.1]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.3.1
-[1.3.0]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.3.0
-[1.2.0]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.2.0
-[1.1.0]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.1.0
-[1.0.0]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.0.0
-[0.1.0]: https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/0.1.0
+[1.3.1]: <https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.3.1>
+[1.3.0]: <https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.3.0>
+[1.2.0]: <https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.2.0>
+[1.1.0]: <https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.1.0>
+[1.0.0]: <https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/1.0.0>
+[0.1.0]: <https://github.com/lucasgaldinos/obsidian-gfm-headers/releases/tag/0.1.0>

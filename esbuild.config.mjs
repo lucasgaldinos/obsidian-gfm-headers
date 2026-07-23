@@ -23,6 +23,9 @@ const context = await esbuild.context({
   minify: prod,
   sourcemap: prod ? false : "inline",
   treeShaking: true,
+  define: {
+    'DEBUG_ENABLED': prod ? 'false' : 'true',
+  }
 });
 
 if (prod) {
